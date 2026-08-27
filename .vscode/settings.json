@@ -1,0 +1,12 @@
+{
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+  "css.validate": false,
+  "tailwindCSS.includeLanguages": {
+    "typescript": "javascript",
+    "typescriptreact": "html",
+    "javascriptreact": "html"
+  },
+  "tailwindCSS.emmetCompletions": true
+}

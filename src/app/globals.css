@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@font-face {
+	font-family: "AIx Darbotzcumi";
+	src: url("/fonts/AIxDB-CUMI.TTF") format("truetype");
+	font-display: swap;
+}
