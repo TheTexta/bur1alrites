@@ -19,7 +19,7 @@ const GLASS_Y_BLUR_FILTER_ID = "glass-y-blur";
 const MAX_Y_BLUR = 200;
 const Y_BLUR_CURVE = 1;
 // Very high exponent holds the wordmark at full strength, then drops it away at the very end.
-const FADE_OUT_CURVE = 20;
+const FADE_OUT_CURVE = 4;
 
 const LOGO_MASK = {
   maskImage: "url(/assets/logo.png)",
@@ -42,8 +42,8 @@ const GLASS_FILTER =
   "drop-shadow(0 -1px 0 rgba(255,255,255,0.9)) drop-shadow(0 1px 0 rgba(0,0,0,0.45)) drop-shadow(-1px 0 0 rgba(120,200,255,0.12)) drop-shadow(1px 0 0 rgba(255,140,220,0.1)) drop-shadow(0 14px 30px rgba(0,0,0,0.25))";
 
 // TODO: swap in the real destinations once they are confirmed.
-const CONTACT_EMAIL = "#";
-const CONTACT_INSTAGRAM = "#";
+const CONTACT_EMAIL = "alissazagorski@gmail.com";
+const CONTACT_INSTAGRAM = "https://www.instagram.com/bur1alrites/";
 
 function blurProgress(scrollY: number, viewport: number, maxScroll: number) {
   const begin = viewport * TEXT_BLUR_START_COVERAGE;
@@ -105,7 +105,6 @@ export function HeroWordmark() {
         ? Math.min(Math.max((viewport - contact.getBoundingClientRect().top) / viewport, 0), 1)
         : 0;
       glass.style.opacity = (entry ** GLASS_CURVE).toFixed(3);
-      links.style.pointerEvents = entry > 0.6 ? "auto" : "none";
     };
 
     const onScroll = () => {
@@ -172,13 +171,13 @@ export function HeroWordmark() {
         <ul
           ref={linksRef}
           className="absolute bottom-[12vh] m-0 flex list-none flex-col items-center gap-2 p-0 text-center text-[clamp(14px,1.4vw,20px)] uppercase"
-          style={{ filter: GLASS_FILTER, pointerEvents: "none" }}
+          style={{ filter: GLASS_FILTER, pointerEvents: "auto" }}
         >
           <li>
             <a
               className="bg-clip-text text-transparent underline-offset-4 hover:underline"
               style={{ backgroundImage: GLASS_GRADIENT }}
-              href={CONTACT_EMAIL}
+              href={`mailto:${CONTACT_EMAIL}`}
             >
               email
             </a>

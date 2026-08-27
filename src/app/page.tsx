@@ -103,7 +103,7 @@ export default function StorageTestPage() {
         })}
       </div>
 
-      <section id="contact" className="relative z-10 h-svh w-full" />
+      <section id="contact" className="pointer-events-none relative z-10 h-svh w-full" />
     </>
   );
 }
