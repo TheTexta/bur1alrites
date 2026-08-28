@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { attachHlsStream } from "@/lib/hls-stream";
+
 type HeroVideoProps = {
-  src: string;
+  manifestUrl: string;
+  posterUrl: string;
 };
 
-export function HeroVideo({ src }: HeroVideoProps) {
+export function HeroVideo({ manifestUrl, posterUrl }: HeroVideoProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
 
@@ -14,26 +17,44 @@ export function HeroVideo({ src }: HeroVideoProps) {
     const video = ref.current;
     if (!video) return;
 
+    let controller: Awaited<ReturnType<typeof attachHlsStream>> | null = null;
+    let cancelled = false;
     const markReady = () => setReady(true);
 
-    if (video.readyState >= 3) markReady();
     video.addEventListener("canplay", markReady);
-    // Autoplay can still be refused even when muted; failing here just leaves the scrim.
-    void video.play().catch(() => {});
+    void attachHlsStream(video, manifestUrl, {
+      startLevel: 0,
+      onFatalError: () => setReady(false),
+    })
+      .then((nextController) => {
+        if (cancelled) {
+          nextController.destroy();
+          return;
+        }
 
-    return () => video.removeEventListener("canplay", markReady);
-  }, []);
+        controller = nextController;
+        // Autoplay can still be refused even when muted; failing here just leaves the scrim.
+        void video.play().catch(() => {});
+      })
+      .catch(() => setReady(false));
+
+    return () => {
+      cancelled = true;
+      controller?.destroy();
+      video.removeEventListener("canplay", markReady);
+    };
+  }, [manifestUrl]);
 
   return (
     <div className="absolute inset-0 overflow-hidden">
       <video
         ref={ref}
-        src={src}
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${ready ? "opacity-100" : "opacity-0"}`}
         muted
         loop
         playsInline
         preload="auto"
+        poster={posterUrl}
         tabIndex={-1}
         aria-hidden="true"
       />

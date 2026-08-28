@@ -1,7 +1,14 @@
 import Image from "next/image";
 
-import { buildSupabaseStoragePublicUrl } from "@/lib/supabase/config";
-import { buildPortfolioStoragePath } from "@/lib/portfolio/config";
+import {
+  buildSupabaseStoragePublicUrl,
+  buildSupabaseStorageRenderUrl,
+} from "@/lib/supabase/config";
+import {
+  buildPortfolioStoragePath,
+  buildPortfolioStreamManifestPath,
+  buildPortfolioVideoPosterPath,
+} from "@/lib/portfolio/config";
 
 import { HeroVideo } from "./hero-video";
 import { HeroWordmark } from "./hero-wordmark";
@@ -46,14 +53,20 @@ const MEDIA: MediaItem[] = [
 ];
 
 export default function StorageTestPage() {
-  const heroSrc = buildSupabaseStoragePublicUrl(
-    buildPortfolioStoragePath("hero", "mov"),
+  const heroManifestUrl = buildSupabaseStoragePublicUrl(
+    buildPortfolioStreamManifestPath("hero"),
+  );
+  const heroPosterUrl = buildSupabaseStoragePublicUrl(
+    buildPortfolioVideoPosterPath("hero"),
   );
 
   return (
     <>
       <section className="relative z-10 h-svh w-full overflow-hidden bg-black isolate after:absolute after:inset-0 after:pointer-events-none after:bg-[linear-gradient(rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.15)_35%,rgba(0,0,0,0.75)_100%)]">
-        <HeroVideo src={heroSrc} />
+        <HeroVideo
+          manifestUrl={heroManifestUrl}
+          posterUrl={heroPosterUrl}
+        />
         <ScrollBars />
       </section>
 
@@ -62,8 +75,23 @@ export default function StorageTestPage() {
       <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
         {MEDIA.map((item) => {
           const path = buildPortfolioStoragePath(item.slug, item.extension);
-          const src = buildSupabaseStoragePublicUrl(path);
           const isVideo = item.extension === "mov";
+          const imageSrc = isVideo
+            ? null
+            : buildSupabaseStorageRenderUrl(path, {
+                width: 960,
+                quality: 75,
+              });
+          const manifestUrl = isVideo
+            ? buildSupabaseStoragePublicUrl(
+                buildPortfolioStreamManifestPath(item.slug),
+              )
+            : null;
+          const posterUrl = isVideo
+            ? buildSupabaseStoragePublicUrl(
+                buildPortfolioVideoPosterPath(item.slug),
+              )
+            : null;
 
           return (
             <article key={item.slug} className="mb-0 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
@@ -71,19 +99,21 @@ export default function StorageTestPage() {
                 <span className="relative block min-h-[60px] w-full bg-[#050505] [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full [&_img]:transition-[filter] [&_video]:transition-[filter] [&_img]:grayscale [&_img]:invert [&_video]:grayscale [&_video]:invert hover:[&_img]:grayscale-0 hover:[&_img]:invert-0 hover:[&_video]:grayscale-0 hover:[&_video]:invert-0 focus-within:[&_img]:grayscale-0 focus-within:[&_img]:invert-0 focus-within:[&_video]:grayscale-0 focus-within:[&_video]:invert-0">
                   {isVideo ? (
                     <VideoThumb
-                      src={src}
+                      manifestUrl={manifestUrl!}
+                      posterUrl={posterUrl!}
                       width={item.width}
                       height={item.height}
                       label={item.title}
                     />
                   ) : (
                     <Image
-                      src={src}
+                      src={imageSrc!}
                       alt={item.title}
                       width={item.width}
                       height={item.height}
                       quality={75}
                       sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
+                      unoptimized
                     />
                   )}
                 </span>

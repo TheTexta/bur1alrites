@@ -45,3 +45,13 @@ export function buildPortfolioStoragePath(slug: string, extension?: string) {
   const base = portfolioImageBasePath().replace(/\/$/, "");
   return `${base}/${slug}.${normalizePortfolioExtension(extension)}`;
 }
+
+export function buildPortfolioStreamManifestPath(slug: string) {
+  const base = portfolioImageBasePath().replace(/\/$/, "");
+  return `${base}/streams/${slug}/master.m3u8`;
+}
+
+export function buildPortfolioVideoPosterPath(slug: string) {
+  const base = portfolioImageBasePath().replace(/\/$/, "");
+  return `${base}/posters/${slug}.jpg`;
+}

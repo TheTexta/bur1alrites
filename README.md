@@ -1,4 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# bur1alrites
+
+## Adaptive video delivery
+
+MOV files in `portfolio-images/` are preserved as archival masters. The site
+only requests HLS manifests and segments:
+
+- The hero starts at the 540p HLS rendition and can adapt to 720p/1080p.
+- Gallery clips load only a poster initially; their HLS player is dynamically
+  imported on hover or touch, then destroyed when the pointer leaves.
+- Source MOVs are never rendered as a browser video URL.
+
+The worker at [media-worker](./media-worker) reconciles the existing bucket
+every five minutes. A new or replaced MOV has a new source fingerprint, so the
+worker creates versioned fMP4 HLS segments and uploads the stable manifest only
+after every segment is present. Immutable versioned segments receive a one-year
+cache policy; the small stable manifest and poster revalidate normally.
+
+### Deploy the worker in Coolify
+
+1. Create a separate Compose resource from this repository with
+   `media-worker` as the working directory.
+2. Copy [`.env.example`](./media-worker/.env.example) to the resource’s `.env`
+   and set the existing Supabase service-role key there. Do not expose that key
+   to the site or browser.
+3. Deploy. The worker adds the HLS playlist MIME type to the existing public
+   `bur1alrites` bucket, processes one MOV at a time, and has no inbound port.
+
+For a one-off backfill, run:
+
+```bash
+npm run hls:worker:once
+```
+
+To validate only one source before a full backfill:
+
+```bash
+HLS_SOURCE_OBJECT=hero.mov npm run hls:worker:once
+```
 
 ## Getting Started
 

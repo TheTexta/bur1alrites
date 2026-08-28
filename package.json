@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "hls:worker": "node media-worker/worker.mjs",
+    "hls:worker:once": "node media-worker/worker.mjs --once"
   },
   "dependencies": {
+    "hls.js": "^1.7.1",
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -1,35 +1,79 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+
+import { attachHlsStream } from "@/lib/hls-stream";
 
 type VideoThumbProps = {
-  src: string;
+  manifestUrl: string;
+  posterUrl: string;
   width: number;
   height: number;
   label: string;
 };
 
-export function VideoThumb({ src, width, height, label }: VideoThumbProps) {
+export function VideoThumb({
+  manifestUrl,
+  posterUrl,
+  width,
+  height,
+  label,
+}: VideoThumbProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  const controllerRef =
+    useRef<Awaited<ReturnType<typeof attachHlsStream>> | null>(null);
+  const loadingRef = useRef(false);
+
+  useEffect(() => {
+    return () => controllerRef.current?.destroy();
+  }, []);
+
+  async function playPreview() {
+    const video = ref.current;
+    if (!video || loadingRef.current) return;
+
+    loadingRef.current = true;
+
+    try {
+      if (!controllerRef.current) {
+        controllerRef.current = await attachHlsStream(video, manifestUrl, {
+          startLevel: 0,
+        });
+      }
+
+      await video.play();
+    } catch {
+      // The poster remains visible if a stream is not ready yet.
+    } finally {
+      loadingRef.current = false;
+    }
+  }
+
+  function stopPreview() {
+    const video = ref.current;
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+
+    controllerRef.current?.destroy();
+    controllerRef.current = null;
+  }
 
   return (
     <video
       ref={ref}
-      src={src}
       muted
       loop
       playsInline
-      preload="metadata"
+      preload="none"
+      poster={posterUrl}
       aria-label={label}
       // Reserve space before metadata loads so the masonry doesn't reflow.
       style={{ aspectRatio: `${width} / ${height}` }}
-      onMouseEnter={() => void ref.current?.play().catch(() => {})}
-      onMouseLeave={() => {
-        const video = ref.current;
-        if (!video) return;
-        video.pause();
-        video.currentTime = 0;
-      }}
+      onMouseEnter={() => void playPreview()}
+      onMouseLeave={stopPreview}
+      onTouchStart={() => void playPreview()}
     />
   );
 }
