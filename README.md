@@ -26,6 +26,18 @@ cache policy; the small stable manifest and poster revalidate normally.
 3. Deploy. The worker adds the HLS playlist MIME type to the existing public
    `bur1alrites` bucket, processes one MOV at a time, and has no inbound port.
 
+### Admin gallery
+
+The private editor is available at `/admin`. Configure `ADMIN_PASSWORD` and a
+long random `ADMIN_SESSION_SECRET` in the site deployment environment. Apply
+`supabase/migrations/202608280001_gallery_items.sql` before using the editor;
+the public gallery falls back to its current metadata until the table exists.
+
+The admin can edit title, client, type, and year, and can queue new video
+sources for the worker. The current upload route sends files through the Next
+application, so use a direct signed Supabase upload flow before accepting
+large production clips on a serverless host.
+
 For a one-off backfill, run:
 
 ```bash

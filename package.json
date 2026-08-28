@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "hls:worker": "node media-worker/worker.mjs",
-    "hls:worker:once": "node media-worker/worker.mjs --once"
+    "hls:worker:once": "node media-worker/worker.mjs --once",
+    "admin:hash-password": "node scripts/hash-admin-password.mjs",
+    "gallery:seed": "node scripts/seed-gallery.mjs"
   },
   "dependencies": {
     "hls.js": "^1.7.1",

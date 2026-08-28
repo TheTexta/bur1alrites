@@ -14,23 +14,14 @@ import { HeroVideo } from "./hero-video";
 import { HeroWordmark } from "./hero-wordmark";
 import { ScrollBars } from "./scroll-bars";
 import { VideoThumb } from "./video-thumb";
+import { listGalleryItems, type GalleryItem } from "@/lib/gallery";
 
-type MediaItem = {
-  slug: string;
-  extension: string;
-  width: number;
-  height: number;
-  title: string;
-  client: string;
-  type: string;
-  year: string;
-};
+type MediaItem = GalleryItem;
 
 const MEDIA: MediaItem[] = [
   { slug: "img-0722", extension: "mov", width: 1920, height: 1080, title: "Untitled 0722", client: "bur1alrites", type: "clip", year: "2026" },
   { slug: "img-1254", extension: "mov", width: 1080, height: 1920, title: "Untitled 1254", client: "bur1alrites", type: "clip", year: "2026" },
   { slug: "img-0723", extension: "mov", width: 1920, height: 1080, title: "Untitled 0723", client: "bur1alrites", type: "clip", year: "2026" },
-  { slug: "screenshot-2026-08-27-at-12-47-38-pm", extension: "png", width: 866, height: 1070, title: "Still 001", client: "bur1alrites", type: "still", year: "2026" },
   { slug: "img-0980", extension: "mov", width: 1920, height: 1080, title: "Untitled 0980", client: "bur1alrites", type: "clip", year: "2026" },
   { slug: "img-1256", extension: "mov", width: 1080, height: 1920, title: "Untitled 1256", client: "bur1alrites", type: "clip", year: "2026" },
   { slug: "img-0990", extension: "mov", width: 1920, height: 1080, title: "Untitled 0990", client: "bur1alrites", type: "clip", year: "2026" },
@@ -52,7 +43,9 @@ const MEDIA: MediaItem[] = [
   { slug: "img-6165", extension: "mov", width: 1920, height: 1080, title: "Untitled 6165", client: "bur1alrites", type: "clip", year: "2026" },
 ];
 
-export default function StorageTestPage() {
+export default async function StorageTestPage() {
+  const galleryItems = await listGalleryItems({ publishedOnly: true }).catch(() => null);
+  const media = galleryItems?.length ? galleryItems : MEDIA;
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );
@@ -73,7 +66,7 @@ export default function StorageTestPage() {
       <HeroWordmark />
 
       <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
-        {MEDIA.map((item) => {
+        {media.map((item) => {
           const path = buildPortfolioStoragePath(item.slug, item.extension);
           const isVideo = item.extension === "mov";
           const imageSrc = isVideo

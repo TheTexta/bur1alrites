@@ -20,6 +20,7 @@ const HLS_SEGMENT_SECONDS = positiveInteger(
 const HLS_PRESET = process.env.HLS_FFMPEG_PRESET ?? "slow";
 const SOURCE_OBJECT_FILTER = process.env.HLS_SOURCE_OBJECT?.trim() ?? "";
 const RUN_ONCE = process.argv.includes("--once");
+const CATALOG_ENABLED = Boolean(SUPABASE_URL && SERVICE_ROLE_KEY);
 
 const VERSIONED_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const CURRENT_CACHE_CONTROL = "no-cache";
@@ -86,6 +87,34 @@ async function storageRequest(path, init = {}) {
   });
 
   return response;
+}
+
+async function catalogRequest(path, init = {}) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      "content-type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+async function updateCatalogStatus(slug, status, processingError = null) {
+  if (!CATALOG_ENABLED) return;
+
+  const response = await catalogRequest(
+    `gallery_items?slug=eq.${encodeURIComponent(slug)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status, processing_error: processingError }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Could not update catalog status for ${slug}: ${await responseText(response)}`);
+  }
 }
 
 async function responseText(response) {
@@ -489,6 +518,7 @@ async function processSource(source) {
   }
 
   console.log(`start ${source.name} (${version})`);
+  await updateCatalogStatus(slug, "processing");
   const workDirectory = await mkdtemp(join(tmpdir(), "bur1alrites-hls-"));
 
   try {
@@ -533,6 +563,8 @@ async function processSource(source) {
       CURRENT_CACHE_CONTROL,
     );
 
+    await updateCatalogStatus(slug, "published");
+
     console.log(`done  ${source.name} (${variants.map(({ id }) => id).join(", ")})`);
   } finally {
     await rm(workDirectory, { force: true, recursive: true });
@@ -566,6 +598,11 @@ async function runCycle() {
       await processSource(source);
     } catch (error) {
       console.error(`failed ${source.name}`, error);
+      try {
+        await updateCatalogStatus(sourceSlug(source.name), "failed", String(error.message ?? error));
+      } catch (statusError) {
+        console.error(`failed to update catalog for ${source.name}`, statusError);
+      }
     }
   }
 }
