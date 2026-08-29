@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { attachHlsStream } from "@/lib/hls-stream";
 
@@ -23,6 +23,7 @@ export function VideoThumb({
   const controllerRef =
     useRef<Awaited<ReturnType<typeof attachHlsStream>> | null>(null);
   const loadingRef = useRef(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     return () => controllerRef.current?.destroy();
@@ -69,11 +70,15 @@ export function VideoThumb({
       preload="none"
       poster={posterUrl}
       aria-label={label}
+      // Lets the wrapper drop its invert on tap, since touch never fires :hover.
+      data-playing={isPlaying ? "" : undefined}
       // Reserve space before metadata loads so the masonry doesn't reflow.
       style={{ aspectRatio: `${width} / ${height}` }}
+      onPlaying={() => setIsPlaying(true)}
+      onPause={() => setIsPlaying(false)}
       onMouseEnter={() => void playPreview()}
       onMouseLeave={stopPreview}
-      onTouchStart={() => void playPreview()}
+      onTouchStart={() => (isPlaying ? stopPreview() : void playPreview())}
     />
   );
 }

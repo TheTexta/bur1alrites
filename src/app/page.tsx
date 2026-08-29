@@ -89,9 +89,9 @@ export default async function StorageTestPage() {
             : null;
 
           return (
-            <article key={item.slug} className="mb-0 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
-              <div className="block w-full text-inherit">
-                <span className="relative block min-h-[60px] w-full bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full">
+            <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
+              <div className="relative block w-full text-inherit">
+                <span className="relative block min-h-[60px] w-full bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 has-[video[data-playing]]:grayscale-0 has-[video[data-playing]]:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full">
                   {isVideo ? (
                     <VideoThumb
                       manifestUrl={manifestUrl!}
@@ -112,14 +112,14 @@ export default async function StorageTestPage() {
                     />
                   )}
                 </span>
-                <span className="relative z-10 flex items-start justify-between -mt-10 leading-[1.35] text-white mix-blend-difference max-[479px]:mt-0">
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-[5px] pb-[5px] leading-[1.35] text-white mix-blend-difference">
                   <span className="flex min-w-0 flex-col">
-                    <span className="mt-[5px] pl-[5px] font-bold">{item.title}</span>
-                    <span className="pb-[5px] pl-[5px]">{item.client}</span>
+                    <span className="font-bold">{item.title}</span>
+                    <span>{item.client}</span>
                   </span>
                   <span className="flex min-w-0 flex-col items-end text-right">
-                    <span className="mt-[5px] px-[5px] max-[479px]:pl-[5px] max-[479px]:pr-0">{item.type}</span>
-                    <span className="mb-[15px] px-[5px] pb-[5px] pr-0">{item.year}</span>
+                    <span>{item.type}</span>
+                    <span>{item.year}</span>
                   </span>
                 </span>
               </div>
