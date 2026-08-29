@@ -102,7 +102,7 @@ export function VideoThumb({
   return (
     <span
       data-active={isActive ? "" : undefined}
-      className={`relative block min-h-[60px] w-full overflow-hidden bg-[#050505] transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}
+      className={`relative block min-h-[60px] w-full overflow-hidden transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}
     >
       <video
         ref={ref}
