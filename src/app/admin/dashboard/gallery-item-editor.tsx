@@ -4,6 +4,8 @@ import { ArrowDown, ArrowUp, Check, Save } from "lucide-react";
 
 import type { AdminGalleryItem } from "@/lib/gallery";
 
+import { AdminVideoPreview } from "./admin-video-preview";
+
 export type EditableField = "title" | "client" | "type" | "year";
 
 type Feedback = { kind: "saving" | "success" | "error"; message: string } | undefined;
@@ -50,7 +52,7 @@ export function GalleryItemEditor({
   const visibilityEditable = item.status === "published" || item.status === "archived";
 
   return (
-    <article className="grid gap-5 py-6 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
+    <article className="grid gap-5 py-6 lg:grid-cols-[220px_minmax(0,1fr)_auto] lg:items-end">
       <div className="self-start">
         <div className="flex items-center gap-2">
           <span className="text-xs tabular-nums text-black/60">{String(position + 1).padStart(2, "0")}</span>
@@ -63,6 +65,7 @@ export function GalleryItemEditor({
           {dirty ? <span className="text-xs font-bold">Unsaved</span> : null}
         </div>
         {item.processing_error ? <p className="mt-3 text-xs leading-5 text-red-700">{item.processing_error}</p> : null}
+        <AdminVideoPreview item={item} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
