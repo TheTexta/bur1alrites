@@ -21,8 +21,8 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: S
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-[#e2e1e1] bg-[linear-gradient(to_right,rgba(5,5,5,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(5,5,5,0.06)_1px,transparent_1px)] bg-[size:32px_32px] px-5 py-10 text-[#050505]">
-      <div className="w-full max-w-md border border-black bg-[#e2e1e1] p-6 sm:p-9">
+    <main className="flex min-h-svh items-center justify-center bg-white px-5 py-10 text-black">
+      <div className="w-full max-w-md border border-black bg-white p-6 sm:p-9">
         <p className="text-xs uppercase tracking-[0.2em]">bur1alrites / admin</p>
         <h1 className="mt-10 text-4xl">Sign in</h1>
         <LoginForm
