@@ -8,7 +8,10 @@ import {
   buildPortfolioStreamManifestPath,
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
-import { buildSupabaseStoragePublicUrl } from "@/lib/supabase/config";
+import {
+  buildSupabaseStoragePublicUrl,
+  buildSupabaseStorageRenderUrl,
+} from "@/lib/supabase/config";
 import type { AdminGalleryItem } from "@/lib/gallery";
 
 export function AdminVideoPreview({ item }: { item: AdminGalleryItem }) {
@@ -77,7 +80,10 @@ export function AdminVideoPreview({ item }: { item: AdminGalleryItem }) {
         playsInline
         preload="none"
         controls={active}
-        poster={buildSupabaseStoragePublicUrl(buildPortfolioVideoPosterPath(item.slug))}
+        poster={buildSupabaseStorageRenderUrl(
+          buildPortfolioVideoPosterPath(item.slug),
+          { width: 960, quality: 75 },
+        )}
         aria-label={`${item.title} video preview`}
         className="size-full object-contain"
       />

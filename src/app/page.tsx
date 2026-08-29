@@ -49,8 +49,9 @@ export default async function StorageTestPage() {
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );
-  const heroPosterUrl = buildSupabaseStoragePublicUrl(
+  const heroPosterUrl = buildSupabaseStorageRenderUrl(
     buildPortfolioVideoPosterPath("hero"),
+    { width: 1920, quality: 75 },
   );
 
   return (
@@ -81,15 +82,16 @@ export default async function StorageTestPage() {
               )
             : null;
           const posterUrl = isVideo
-            ? buildSupabaseStoragePublicUrl(
+            ? buildSupabaseStorageRenderUrl(
                 buildPortfolioVideoPosterPath(item.slug),
+                { width: 960, quality: 75 },
               )
             : null;
 
           return (
             <article key={item.slug} className="mb-0 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
               <div className="block w-full text-inherit">
-                <span className="relative block min-h-[60px] w-full bg-[#050505] [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full [&_img]:transition-[filter] [&_video]:transition-[filter] [&_img]:grayscale [&_img]:invert [&_video]:grayscale [&_video]:invert hover:[&_img]:grayscale-0 hover:[&_img]:invert-0 hover:[&_video]:grayscale-0 hover:[&_video]:invert-0 focus-within:[&_img]:grayscale-0 focus-within:[&_img]:invert-0 focus-within:[&_video]:grayscale-0 focus-within:[&_video]:invert-0">
+                <span className="relative block min-h-[60px] w-full bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full">
                   {isVideo ? (
                     <VideoThumb
                       manifestUrl={manifestUrl!}
