@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   if (!isAdminConfigured()) {
     return NextResponse.json(
-      { error: "Admin authentication is not configured." },
+      { error: "Admin authentication is not configured correctly." },
       { status: 503 },
     );
   }

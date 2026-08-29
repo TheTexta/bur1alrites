@@ -12,7 +12,19 @@ function sign(value: string) {
 }
 
 export function isAdminConfigured() {
-  return Boolean(process.env.ADMIN_PASSWORD_HASH && sessionSecret());
+  return Boolean(isValidPasswordHash(process.env.ADMIN_PASSWORD_HASH) && sessionSecret());
+}
+
+function isValidPasswordHash(value: string | undefined) {
+  if (!value) return false;
+
+  const [algorithm, salt, hash, extra] = value.split(":");
+  return (
+    algorithm === "scrypt" &&
+    /^[a-f\d]{32}$/i.test(salt ?? "") &&
+    /^[a-f\d]{128}$/i.test(hash ?? "") &&
+    extra === undefined
+  );
 }
 
 export function createAdminSession() {
@@ -47,7 +59,7 @@ export function createPasswordHash(password: string) {
 
 export function passwordsMatch(password: string) {
   const configured = process.env.ADMIN_PASSWORD_HASH;
-  if (!configured?.startsWith("scrypt:")) return false;
+  if (!configured || !isValidPasswordHash(configured)) return false;
 
   const [, salt, expectedHash] = configured.split(":");
   if (!salt || !expectedHash) return false;
