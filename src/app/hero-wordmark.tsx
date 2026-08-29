@@ -179,7 +179,7 @@ export function HeroWordmark() {
               style={{ backgroundImage: GLASS_GRADIENT }}
               href={`mailto:${CONTACT_EMAIL}`}
             >
-              email
+              {CONTACT_EMAIL}
             </a>
           </li>
           <li>
@@ -190,7 +190,7 @@ export function HeroWordmark() {
               target="_blank"
               rel="noreferrer noopener"
             >
-              instagram
+              @bur1alrites
             </a>
           </li>
         </ul>

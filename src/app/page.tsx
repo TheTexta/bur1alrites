@@ -91,16 +91,16 @@ export default async function StorageTestPage() {
           return (
             <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
               <div className="relative block w-full text-inherit">
-                <span className="relative block min-h-[60px] w-full bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 has-[video[data-playing]]:grayscale-0 has-[video[data-playing]]:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full [&_video]:block [&_video]:h-auto [&_video]:w-full">
-                  {isVideo ? (
-                    <VideoThumb
-                      manifestUrl={manifestUrl!}
-                      posterUrl={posterUrl!}
-                      width={item.width}
-                      height={item.height}
-                      label={item.title}
-                    />
-                  ) : (
+                {isVideo ? (
+                  <VideoThumb
+                    manifestUrl={manifestUrl!}
+                    posterUrl={posterUrl!}
+                    width={item.width}
+                    height={item.height}
+                    label={item.title}
+                  />
+                ) : (
+                  <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">
                     <Image
                       src={imageSrc!}
                       alt={item.title}
@@ -110,8 +110,8 @@ export default async function StorageTestPage() {
                       sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
                       unoptimized
                     />
-                  )}
-                </span>
+                  </span>
+                )}
                 <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-[5px] pb-[5px] leading-[1.35] text-white mix-blend-difference">
                   <span className="flex min-w-0 flex-col">
                     <span className="font-bold">{item.title}</span>
