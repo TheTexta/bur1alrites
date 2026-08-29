@@ -45,7 +45,7 @@ const MEDIA: MediaItem[] = [
 
 export default async function StorageTestPage() {
   const galleryItems = await listGalleryItems({ publishedOnly: true }).catch(() => null);
-  const media = galleryItems?.length ? galleryItems : MEDIA;
+  const media = galleryItems === null ? MEDIA : galleryItems;
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );

@@ -1,60 +1,35 @@
-"use client";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { ADMIN_SESSION_COOKIE, isValidAdminSession } from "@/lib/admin-auth";
 
-export default function AdminLoginPage() {
-  const router = useRouter();
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+import { LoginForm } from "./login-form";
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPending(true);
-    setError("");
+type SearchParams = Promise<{ expired?: string; next?: string }>;
 
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+function safeDestination(value: string | undefined) {
+  return value?.startsWith("/admin/dashboard") ? value : "/admin/dashboard";
+}
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      setError(body?.error ?? "Unable to sign in.");
-      setPending(false);
-      return;
-    }
+export default async function AdminLoginPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const destination = safeDestination(params.next);
+  const session = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
 
-    router.push("/admin/dashboard");
+  if (isValidAdminSession(session)) {
+    redirect(destination);
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-[#e2e1e1] px-6 text-black">
-      <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-5">
+    <main className="flex min-h-svh items-center justify-center bg-[#e2e1e1] bg-[linear-gradient(to_right,rgba(5,5,5,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(5,5,5,0.06)_1px,transparent_1px)] bg-[size:32px_32px] px-5 py-10 text-[#050505]">
+      <div className="w-full max-w-md border border-black bg-[#e2e1e1] p-6 sm:p-9">
         <p className="text-xs uppercase tracking-[0.2em]">bur1alrites / admin</p>
-        <h1 className="text-3xl">Enter password</h1>
-        <label className="flex flex-col gap-2 text-sm">
-          Password
-          <input
-            autoFocus
-            required
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="border border-black bg-transparent px-3 py-3 outline-none focus:bg-white"
-          />
-        </label>
-        {error ? <p className="text-sm text-red-700">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={pending}
-          className="border border-black px-3 py-3 text-left disabled:opacity-50"
-        >
-          {pending ? "Checking..." : "Continue"}
-        </button>
-      </form>
+        <h1 className="mt-10 text-4xl">Sign in</h1>
+        <LoginForm
+          destination={destination}
+          initialMessage={params.expired ? "Your session ended. Sign in to continue." : ""}
+        />
+      </div>
     </main>
   );
 }

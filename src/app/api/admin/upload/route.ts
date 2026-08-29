@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isValidAdminSession } from "@/lib/admin-auth";
-import { createGalleryItem, uploadPortfolioSource } from "@/lib/gallery";
+import { createGalleryItem, deleteProcessingGalleryItem, GalleryRequestError, uploadPortfolioSource } from "@/lib/gallery";
 import { buildPortfolioStoragePath, normalizePortfolioExtension } from "@/lib/portfolio/config";
 import { ADMIN_SESSION_COOKIE } from "@/lib/admin-session";
 
@@ -36,12 +36,39 @@ export async function POST(request: Request) {
   const type = String(form.get("type") ?? "clip").trim();
   const year = String(form.get("year") ?? new Date().getFullYear()).trim();
 
-  if (!(file instanceof File) || !slug || !title || !client || !width || !height || extension === "webp") {
-    return NextResponse.json({ error: "A video, slug, title, client, width, and height are required." }, { status: 400 });
+  if (!(file instanceof File) || !slug || !title || !client || !type || !year) {
+    return NextResponse.json({ error: "A video and all descriptive fields are required." }, { status: 400 });
   }
 
-  await createGalleryItem({ slug, extension, width, height, title, client, type, year });
-  await uploadPortfolioSource(buildPortfolioStoragePath(slug, extension), await file.arrayBuffer(), file.type || "video/quicktime");
+  if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) {
+    return NextResponse.json({ error: "The selected video's dimensions could not be read." }, { status: 400 });
+  }
 
-  return NextResponse.json({ slug, status: "processing" }, { status: 201 });
+  if (extension !== "mov") {
+    return NextResponse.json({ error: "Choose a MOV video for the media processor." }, { status: 400 });
+  }
+
+  let created = false;
+  try {
+    const [item] = await createGalleryItem({ slug, extension, width, height, title, client, type, year });
+    created = true;
+    await uploadPortfolioSource(buildPortfolioStoragePath(slug, extension), await file.arrayBuffer(), file.type || "video/quicktime");
+
+    return NextResponse.json({ item }, { status: 201 });
+  } catch (error) {
+    let cleanupFailed = false;
+    if (created) {
+      await deleteProcessingGalleryItem(slug).catch((cleanupError) => {
+        cleanupFailed = true;
+        console.error(`Could not clean up failed upload for ${slug}.`, cleanupError);
+      });
+    }
+    const statusCode = error instanceof GalleryRequestError && error.status === 409 ? 409 : 500;
+    const message = cleanupFailed
+      ? "Upload failed and its processing record could not be removed."
+      : statusCode === 409
+        ? "A clip with that slug already exists."
+        : "Could not upload the clip.";
+    return NextResponse.json({ error: message }, { status: statusCode });
+  }
 }

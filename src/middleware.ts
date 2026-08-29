@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_SESSION_COOKIE } from "@/lib/admin-session";
 
 export function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/admin/login") {
+  if (request.nextUrl.pathname === "/api/admin/login" || request.nextUrl.pathname === "/api/admin/logout") {
     return NextResponse.next();
   }
 

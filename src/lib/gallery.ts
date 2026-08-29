@@ -1,5 +1,7 @@
 import { getSupabaseUrl } from "./supabase/config";
 
+export type GalleryStatus = "processing" | "published" | "failed" | "archived";
+
 export type GalleryItem = {
   slug: string;
   extension: string;
@@ -9,11 +11,23 @@ export type GalleryItem = {
   client: string;
   type: string;
   year: string;
-  status?: "processing" | "published" | "failed" | "archived";
+  status?: GalleryStatus;
   sort_order?: number;
 };
 
-type GalleryRow = GalleryItem & { id: number; created_at: string };
+export type AdminGalleryItem = GalleryItem & {
+  status: GalleryStatus;
+  sort_order: number;
+  processing_error: string | null;
+};
+
+type GalleryRow = AdminGalleryItem & { id: number; created_at: string };
+
+export class GalleryRequestError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+  }
+}
 
 function serviceRoleKey() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -37,7 +51,7 @@ async function galleryRequest(path: string, init?: RequestInit) {
 export async function listGalleryItems(options?: { publishedOnly?: boolean }) {
   const status = options?.publishedOnly ? "&status=eq.published" : "";
   const response = await galleryRequest(
-    `gallery_items?select=slug,extension,width,height,title,client,type,year,status,sort_order,created_at&order=sort_order.asc,created_at.asc${status}`,
+    `gallery_items?select=slug,extension,width,height,title,client,type,year,status,sort_order,processing_error,created_at&order=sort_order.asc,created_at.asc${status}`,
   );
 
   if (!response.ok) {
@@ -48,25 +62,56 @@ export async function listGalleryItems(options?: { publishedOnly?: boolean }) {
   return (await response.json()) as GalleryRow[];
 }
 
-export async function updateGalleryItem(slug: string, values: Pick<GalleryItem, "title" | "client" | "type" | "year">) {
-  const response = await galleryRequest(`gallery_items?slug=eq.${encodeURIComponent(slug)}`, {
+type GalleryItemUpdate = Partial<Pick<GalleryItem, "title" | "client" | "type" | "year">> & {
+  status?: Extract<GalleryStatus, "published" | "archived">;
+};
+
+export async function updateGalleryItem(slug: string, values: GalleryItemUpdate) {
+  const eligibleStatus = values.status ? "&status=in.(published,archived)" : "";
+  const response = await galleryRequest(`gallery_items?slug=eq.${encodeURIComponent(slug)}${eligibleStatus}`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(values),
   });
 
-  if (!response.ok) throw new Error(`Could not update gallery item: ${response.status}`);
+  if (!response.ok) throw new GalleryRequestError("Could not update gallery item.", response.status);
   return (await response.json()) as GalleryRow[];
 }
 
 export async function createGalleryItem(item: GalleryItem) {
-  const response = await galleryRequest("gallery_items", {
+  const response = await galleryRequest("rpc/create_gallery_item", {
     method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ ...item, status: "processing" }),
+    body: JSON.stringify({
+      item_slug: item.slug,
+      item_extension: item.extension,
+      item_width: item.width,
+      item_height: item.height,
+      item_title: item.title,
+      item_client: item.client,
+      item_type: item.type,
+      item_year: item.year,
+    }),
   });
 
-  if (!response.ok) throw new Error(`Could not create gallery item: ${response.status}`);
+  if (!response.ok) throw new GalleryRequestError("Could not create gallery item.", response.status);
+  return (await response.json()) as GalleryRow[];
+}
+
+export async function deleteProcessingGalleryItem(slug: string) {
+  const response = await galleryRequest(
+    `gallery_items?slug=eq.${encodeURIComponent(slug)}&status=eq.processing`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw new GalleryRequestError("Could not clean up gallery item.", response.status);
+}
+
+export async function moveGalleryItem(slug: string, direction: "up" | "down") {
+  const response = await galleryRequest("rpc/move_gallery_item", {
+    method: "POST",
+    body: JSON.stringify({ item_slug: slug, direction }),
+  });
+
+  if (!response.ok) throw new GalleryRequestError("Could not reorder gallery item.", response.status);
   return (await response.json()) as GalleryRow[];
 }
 
