@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { headers } from "next/headers";
 
 import {
   buildSupabaseStoragePublicUrl,
@@ -10,9 +11,10 @@ import {
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
 import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
+import { detectRenderMode } from "@/lib/browser-render-mode";
 
 import { HeroVideo } from "./hero-video";
-import { HeroWordmark } from "./hero-wordmark";
+import { HeroWordmarkRenderer } from "./hero-wordmark-renderer";
 import { ScrollBars } from "./scroll-bars";
 import { VideoThumb } from "./video-thumb";
 import { listGalleryItems, type GalleryItem } from "@/lib/gallery";
@@ -45,7 +47,11 @@ const MEDIA: MediaItem[] = [
 ];
 
 export default async function StorageTestPage() {
-  const galleryItems = await listGalleryItems({ publishedOnly: true }).catch(() => null);
+  const [requestHeaders, galleryItems] = await Promise.all([
+    headers(),
+    listGalleryItems({ publishedOnly: true }).catch(() => null),
+  ]);
+  const renderMode = detectRenderMode(requestHeaders.get("user-agent"));
   const media = galleryItems === null ? MEDIA : galleryItems;
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
@@ -65,7 +71,7 @@ export default async function StorageTestPage() {
         <ScrollBars />
       </section>
 
-      <HeroWordmark />
+      <HeroWordmarkRenderer renderMode={renderMode} />
 
       <h1 className="pointer-events-none fixed inset-x-2 top-1/2 z-20 m-0 -translate-y-1/2 text-center text-white font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase min-[768px]:hidden">
         bur1alrites
@@ -103,6 +109,7 @@ export default async function StorageTestPage() {
                     width={item.width}
                     height={item.height}
                     label={item.title}
+                    renderMode={renderMode}
                   />
                 ) : (
                   <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">

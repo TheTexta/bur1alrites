@@ -5,6 +5,7 @@ export type HlsStreamController = {
 type AttachHlsStreamOptions = {
   startLevel?: number;
   onFatalError?: () => void;
+  preferNative?: boolean;
 };
 
 const HLS_MIME_TYPE = "application/vnd.apple.mpegurl";
@@ -14,6 +15,17 @@ export async function attachHlsStream(
   manifestUrl: string,
   options: AttachHlsStreamOptions = {},
 ): Promise<HlsStreamController> {
+  if (options.preferNative && video.canPlayType(HLS_MIME_TYPE)) {
+    video.src = manifestUrl;
+
+    return {
+      destroy: () => {
+        video.removeAttribute("src");
+        video.load();
+      },
+    };
+  }
+
   const { default: Hls } = await import("hls.js");
 
   if (Hls.isSupported()) {
