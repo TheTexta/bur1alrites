@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
+
 const MIN_BLUR_PX = 5;
 const MAX_BLUR_PX = 600;
 const MAX_TEXT_BLUR_PX = 14;
@@ -20,6 +22,7 @@ const MAX_Y_BLUR = 200;
 const Y_BLUR_CURVE = 1;
 // Very high exponent holds the wordmark at full strength, then drops it away at the very end.
 const FADE_OUT_CURVE = 4;
+const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 
 const LOGO_MASK = {
   maskImage: "url(/assets/logo.png)",
@@ -40,10 +43,6 @@ const SHEEN_GRADIENT =
 
 const GLASS_FILTER =
   "drop-shadow(0 -1px 0 rgba(255,255,255,0.9)) drop-shadow(0 1px 0 rgba(0,0,0,0.45)) drop-shadow(-1px 0 0 rgba(120,200,255,0.12)) drop-shadow(1px 0 0 rgba(255,140,220,0.1)) drop-shadow(0 14px 30px rgba(0,0,0,0.25))";
-
-// TODO: swap in the real destinations once they are confirmed.
-const CONTACT_EMAIL = "alissazagorski@gmail.com";
-const CONTACT_INSTAGRAM = "https://www.instagram.com/bur1alrites/";
 
 function blurProgress(scrollY: number, viewport: number, maxScroll: number) {
   const begin = viewport * TEXT_BLUR_START_COVERAGE;
@@ -71,6 +70,7 @@ export function HeroWordmark() {
     if (!wordmark || !text || !glow || !glass || !links || !yBlur || !glassYBlur) return;
 
     let frame = 0;
+    let isActive = false;
 
     const render = () => {
       frame = 0;
@@ -112,20 +112,45 @@ export function HeroWordmark() {
       frame = window.requestAnimationFrame(render);
     };
 
-    render();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    const start = () => {
+      if (isActive) return;
+      isActive = true;
+      render();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll, { passive: true });
+    };
 
-    return () => {
+    const stop = () => {
+      if (!isActive) return;
+      isActive = false;
       if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+    };
+
+    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const onMediaChange = (event: MediaQueryListEvent) => {
+      if (event.matches) start();
+      else stop();
+    };
+
+    if (mediaQuery.matches) start();
+    mediaQuery.addEventListener("change", onMediaChange);
+
+    return () => {
+      stop();
+      mediaQuery.removeEventListener("change", onMediaChange);
     };
   }, []);
 
   return (
     <>
-      <svg className="pointer-events-none absolute h-0 w-0" aria-hidden="true" focusable="false">
+      <svg
+        className="pointer-events-none absolute hidden h-0 w-0 min-[768px]:block"
+        aria-hidden="true"
+        focusable="false"
+      >
         <filter id={Y_BLUR_FILTER_ID} x="-50%" y="-100%" width="200%" height="300%">
           <feGaussianBlur ref={yBlurRef} stdDeviation="0 0" />
         </filter>
@@ -136,7 +161,7 @@ export function HeroWordmark() {
 
       <div
         ref={wordmarkRef}
-        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference"
+        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 hidden -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference min-[768px]:block"
         style={{ filter: `url(#${Y_BLUR_FILTER_ID})` }}
       >
         <h1 ref={textRef} className="relative z-10 m-0 text-white">
@@ -153,7 +178,7 @@ export function HeroWordmark() {
 
       <div
         ref={glassRef}
-        className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center opacity-0"
+        className="pointer-events-none fixed inset-0 z-10 hidden items-center justify-center opacity-0 min-[768px]:flex"
       >
         <div
           aria-hidden="true"

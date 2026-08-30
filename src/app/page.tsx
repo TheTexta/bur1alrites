@@ -9,6 +9,7 @@ import {
   buildPortfolioStreamManifestPath,
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
+import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
 
 import { HeroVideo } from "./hero-video";
 import { HeroWordmark } from "./hero-wordmark";
@@ -66,7 +67,11 @@ export default async function StorageTestPage() {
 
       <HeroWordmark />
 
-      <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
+      <h1 className="pointer-events-none fixed inset-x-2 top-1/2 z-20 m-0 -translate-y-1/2 text-center text-white font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase min-[768px]:hidden">
+        bur1alrites
+      </h1>
+
+      <div className="relative z-[30] columns-1 gap-0 p-0 min-[768px]:z-10 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
         {media.map((item) => {
           const path = buildPortfolioStoragePath(item.slug, item.extension);
           const isVideo = item.extension === "mov";
@@ -128,7 +133,35 @@ export default async function StorageTestPage() {
         })}
       </div>
 
-      <section id="contact" className="pointer-events-none relative z-10 h-svh w-full" />
+      <section id="contact" className="relative z-[30] w-full min-[768px]:z-10 min-[768px]:h-svh min-sm:py-0 py-20">
+        <div className="flex flex-col items-center px-6 py-20 text-center min-[768px]:hidden">
+          <Image
+            src="/assets/logo.png"
+            alt="bur1alrites logo"
+            width={866}
+            height={1070}
+            sizes="(max-width: 399px) calc(100vw - 3rem), 360px"
+            className="h-auto w-full max-w-[360px] invert"
+          />
+          <ul className="mt-8 m-0 flex list-none flex-col items-center gap-2 p-0 text-sm uppercase ">
+            <li>
+              <a className="text-black underline underline-offset-4" href={`mailto:${CONTACT_EMAIL}`}>
+                {CONTACT_EMAIL}
+              </a>
+            </li>
+            <li>
+              <a
+                className="text-black underline underline-offset-4"
+                href={CONTACT_INSTAGRAM}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                @bur1alrites
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
     </>
   );
 }
