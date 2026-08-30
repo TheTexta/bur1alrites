@@ -5,7 +5,6 @@ import { useEffect, useRef } from "react";
 import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
 
 import {
-  DESKTOP_MEDIA_QUERY,
   GLASS_TARGET_ID,
   getWordmarkMotion,
   smoothstep,
@@ -157,7 +156,6 @@ export function HeroWordmarkWebKit() {
       render();
       window.addEventListener("scroll", requestRender, { passive: true });
       window.addEventListener("resize", updateGeometry, { passive: true });
-      window.addEventListener("orientationchange", updateGeometry, { passive: true });
     };
 
     const stop = () => {
@@ -167,26 +165,17 @@ export function HeroWordmarkWebKit() {
       frame = 0;
       window.removeEventListener("scroll", requestRender);
       window.removeEventListener("resize", updateGeometry);
-      window.removeEventListener("orientationchange", updateGeometry);
     };
 
     const resizeObserver = new ResizeObserver(updateGeometry);
     if (contact) resizeObserver.observe(contact);
     if (gallery instanceof Element) resizeObserver.observe(gallery);
 
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const onMediaChange = (event: MediaQueryListEvent) => {
-      if (event.matches) start();
-      else stop();
-    };
-
-    if (mediaQuery.matches) start();
-    mediaQuery.addEventListener("change", onMediaChange);
+    start();
 
     return () => {
       stop();
       resizeObserver.disconnect();
-      mediaQuery.removeEventListener("change", onMediaChange);
     };
   }, []);
 
@@ -203,7 +192,7 @@ export function HeroWordmarkWebKit() {
       <div
         ref={wordmarkRef}
         data-wordmark-renderer="webkit-safe"
-        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 hidden -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference min-[768px]:block"
+        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference"
       >
         <h1 ref={crispTextRef} className="relative z-20 m-0 text-white">
           bur1alrites
@@ -240,7 +229,7 @@ export function HeroWordmarkWebKit() {
 
       <div
         ref={glassRef}
-        className="pointer-events-none fixed inset-0 z-10 hidden opacity-0 min-[768px]:block"
+        className="pointer-events-none fixed inset-0 z-10 opacity-0"
       >
         <div ref={smearedLogoRef} aria-hidden="true" className={`${logoClass} opacity-100 blur-lg`}>
           <div className="relative h-full w-full" style={{ filter: GLASS_FILTER }}>

@@ -22,7 +22,6 @@ const MAX_Y_BLUR = 200;
 const Y_BLUR_CURVE = 1;
 // Very high exponent holds the wordmark at full strength, then drops it away at the very end.
 const FADE_OUT_CURVE = 4;
-const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 
 const LOGO_MASK = {
   maskImage: "url(/assets/logo.png)",
@@ -129,25 +128,17 @@ export function HeroWordmark() {
       window.removeEventListener("resize", onScroll);
     };
 
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const onMediaChange = (event: MediaQueryListEvent) => {
-      if (event.matches) start();
-      else stop();
-    };
-
-    if (mediaQuery.matches) start();
-    mediaQuery.addEventListener("change", onMediaChange);
+    start();
 
     return () => {
       stop();
-      mediaQuery.removeEventListener("change", onMediaChange);
     };
   }, []);
 
   return (
     <>
       <svg
-        className="pointer-events-none absolute hidden h-0 w-0 min-[768px]:block"
+        className="pointer-events-none absolute h-0 w-0"
         aria-hidden="true"
         focusable="false"
       >
@@ -161,7 +152,7 @@ export function HeroWordmark() {
 
       <div
         ref={wordmarkRef}
-        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 hidden -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference min-[768px]:block"
+        className="pointer-events-none fixed inset-x-2 top-1/2 z-10 -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase mix-blend-difference"
         style={{ filter: `url(#${Y_BLUR_FILTER_ID})` }}
       >
         <h1 ref={textRef} className="relative z-10 m-0 text-white">
@@ -178,7 +169,7 @@ export function HeroWordmark() {
 
       <div
         ref={glassRef}
-        className="pointer-events-none fixed inset-0 z-10 hidden items-center justify-center opacity-0 min-[768px]:flex"
+        className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center opacity-0"
       >
         <div
           aria-hidden="true"

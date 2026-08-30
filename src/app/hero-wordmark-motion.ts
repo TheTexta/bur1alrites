@@ -1,4 +1,3 @@
-export const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
 export const GLASS_TARGET_ID = "contact";
 
 const GLOW_CURVE = 20;

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef } from "react";
 
+import type { RenderMode } from "@/lib/browser-render-mode";
+
 const BAR_COUNT = 650;
 const VIEW = 1000;
 const MIN_WIDTH = 7;
@@ -64,8 +66,9 @@ function createBars(seed: number): Bar[] {
   });
 }
 
-export function ScrollBars() {
+export function ScrollBars({ renderMode }: { renderMode: RenderMode }) {
   const bars = useMemo(() => createBars(SEED), []);
+  const transitionsEnabled = renderMode !== "webkit-safe";
   const layerRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLSpanElement>(null);
   const shownRef = useRef(0);
@@ -136,9 +139,9 @@ export function ScrollBars() {
               width: bar.width,
               height: bar.height,
               transform: bar.transform,
-              transitionProperty: "opacity",
-              transitionDuration: `${bar.duration}ms`,
-              transitionTimingFunction: "ease-out",
+              transitionProperty: transitionsEnabled ? "opacity" : "none",
+              transitionDuration: transitionsEnabled ? `${bar.duration}ms` : undefined,
+              transitionTimingFunction: transitionsEnabled ? "ease-out" : undefined,
             }}
           />
         ))}
