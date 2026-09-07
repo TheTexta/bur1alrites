@@ -169,7 +169,7 @@ export function HeroWordmark() {
 
       <div
         ref={glassRef}
-        className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center opacity-0"
+        className="pointer-events-none fixed inset-0 z-20 flex items-center justify-center opacity-0"
       >
         <div
           aria-hidden="true"

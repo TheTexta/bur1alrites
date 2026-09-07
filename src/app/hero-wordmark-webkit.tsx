@@ -229,7 +229,7 @@ export function HeroWordmarkWebKit() {
 
       <div
         ref={glassRef}
-        className="pointer-events-none fixed inset-0 z-10 opacity-0"
+        className="pointer-events-none fixed inset-0 z-20 opacity-0"
       >
         <div ref={smearedLogoRef} aria-hidden="true" className={`${logoClass} opacity-100 blur-lg`}>
           <div className="relative h-full w-full" style={{ filter: GLASS_FILTER }}>

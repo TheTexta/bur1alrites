@@ -1,5 +1,7 @@
 export type HlsStreamController = {
   destroy: () => void;
+  startLoading: () => void;
+  stopLoading: () => void;
 };
 
 type AttachHlsStreamOptions = {
@@ -23,6 +25,8 @@ export async function attachHlsStream(
         video.removeAttribute("src");
         video.load();
       },
+      startLoading: () => {},
+      stopLoading: () => {},
     };
   }
 
@@ -46,6 +50,8 @@ export async function attachHlsStream(
 
     return {
       destroy: () => player.destroy(),
+      startLoading: () => player.startLoad(),
+      stopLoading: () => player.stopLoad(),
     };
   }
 
@@ -57,6 +63,8 @@ export async function attachHlsStream(
         video.removeAttribute("src");
         video.load();
       },
+      startLoading: () => {},
+      stopLoading: () => {},
     };
   }
 

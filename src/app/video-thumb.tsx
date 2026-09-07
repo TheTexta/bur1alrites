@@ -43,7 +43,15 @@ export function VideoThumb({
       const activeVideo = (event as CustomEvent<HTMLVideoElement>).detail;
       const video = ref.current;
 
-      if (!video || activeVideo === video || !activeRef.current) return;
+      if (
+        !video ||
+        activeVideo === video ||
+        (!activeRef.current &&
+          (isWebKitSafe ||
+            (!controllerRef.current && !attachPromiseRef.current)))
+      ) {
+        return;
+      }
 
       video.pause();
       video.currentTime = 0;
@@ -147,11 +155,16 @@ export function VideoThumb({
         const controller = await request;
 
         if (controllerRef.current !== controller && attachPromiseRef.current !== request) {
+          controller.destroy();
           return;
         }
 
         if (!activeRef.current) {
-          if (isWebKitSafe && nearViewportRef.current) {
+          if (!isWebKitSafe) {
+            controller.stopLoading();
+            controllerRef.current = controller;
+            if (attachPromiseRef.current === request) attachPromiseRef.current = null;
+          } else if (nearViewportRef.current) {
             controllerRef.current = controller;
             if (attachPromiseRef.current === request) attachPromiseRef.current = null;
           } else {
@@ -164,6 +177,7 @@ export function VideoThumb({
         if (attachPromiseRef.current === request) attachPromiseRef.current = null;
       }
 
+      controllerRef.current?.startLoading();
       await video.play();
 
       if (isWebKitSafe && activeRef.current && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -189,7 +203,9 @@ export function VideoThumb({
       video.currentTime = 0;
     }
 
-    if (!isWebKitSafe || !nearViewportRef.current) {
+    if (!isWebKitSafe) {
+      controllerRef.current?.stopLoading();
+    } else if (!nearViewportRef.current) {
       attachPromiseRef.current = null;
       controllerRef.current?.destroy();
       controllerRef.current = null;
