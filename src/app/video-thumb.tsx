@@ -5,9 +5,55 @@ import { useEffect, useRef, useState } from "react";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
 import { attachHlsStream } from "@/lib/hls-stream";
+import { useReducedMotion } from "./scene-utils";
+import { openVideoRoom } from "./video-room";
 
 const ACTIVATE_PREVIEW_EVENT = "portfolio:activate-preview";
 const WEBKIT_PRELOAD_MARGIN = "25% 0px";
+// Wiggle stays subtle - this is a hover accent, not a full tilt-card effect.
+const TILT_MAX_DEG = 3;
+const TILT_EASE = 0.08;
+
+// Rotates a card toward the pointer's position on the whole viewport (not just over the card),
+// so every thumbnail wiggles together in a shared 3D placement as the pointer moves.
+function useCardTilt(ref: React.RefObject<HTMLElement | null>) {
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reducedMotion) return;
+
+    let raf = 0;
+    let targetX = 0;
+    let targetY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    const onMove = (event: PointerEvent) => {
+      targetX = (event.clientX / window.innerWidth - 0.5) * 2 * TILT_MAX_DEG;
+      targetY = (event.clientY / window.innerHeight - 0.5) * 2 * TILT_MAX_DEG;
+    };
+
+    const tick = () => {
+      currentX += (targetX - currentX) * TILT_EASE;
+      currentY += (targetY - currentY) * TILT_EASE;
+      const el = ref.current;
+      if (el) {
+        el.style.transform = `perspective(900px) rotateX(${(-currentY).toFixed(2)}deg) rotateY(${currentX.toFixed(2)}deg)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: true });
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      cancelAnimationFrame(raf);
+      const el = ref.current;
+      if (el) el.style.transform = "";
+    };
+  }, [ref, reducedMotion]);
+}
 
 type StreamController = Awaited<ReturnType<typeof attachHlsStream>>;
 
@@ -29,6 +75,7 @@ export function VideoThumb({
   renderMode,
 }: VideoThumbProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLSpanElement>(null);
   const activeRef = useRef(false);
   const nearViewportRef = useRef(false);
   const controllerRef = useRef<StreamController | null>(null);
@@ -37,6 +84,8 @@ export function VideoThumb({
   const [isActive, setIsActive] = useState(false);
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
   const isWebKitSafe = renderMode === "webkit-safe";
+
+  useCardTilt(cardRef);
 
   useEffect(() => {
     function handlePreviewActivation(event: Event) {
@@ -235,47 +284,54 @@ export function VideoThumb({
   return (
     <span
       data-active={isActive ? "" : undefined}
-      className={`relative block min-h-[60px] w-full overflow-hidden ${isWebKitSafe ? "" : `transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}`}
-    >
-      <video
-        ref={ref}
-        muted
-        loop
-        playsInline
-        preload="none"
-        poster={posterUrl}
-        aria-label={label}
-        className="block h-auto w-full"
-        // Reserve space before metadata loads so the masonry doesn't reflow.
-        style={{ aspectRatio: `${width} / ${height}` }}
-        onPointerEnter={(event) => {
-          if (event.pointerType === "mouse") activatePreview();
-        }}
-        onPointerLeave={(event) => {
-          if (event.pointerType === "mouse") deactivatePreview();
-        }}
-        onPointerDown={(event) => {
-          if (event.pointerType === "mouse") return;
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") activatePreview();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") deactivatePreview();
+      }}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse") return;
 
-          if (isActive) deactivatePreview();
-          else activatePreview();
-        }}
-        onLoadedData={() => {
-          if (isWebKitSafe && activeRef.current) setHasFirstFrame(true);
-        }}
-      />
-      {isWebKitSafe ? (
-        <Image
-          src={posterUrl}
-          alt=""
-          aria-hidden="true"
-          width={width}
-          height={height}
-          sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
-          unoptimized
-          className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter] duration-150 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"} ${isActive && hasFirstFrame ? "opacity-0 transition-[filter,opacity]" : "opacity-100"}`}
+        if (isActive) deactivatePreview();
+        else activatePreview();
+      }}
+      onClick={() => {
+        stopPreview();
+        openVideoRoom({ manifestUrl, posterUrl, label, width, height });
+      }}
+      className={`relative block min-h-[60px] w-full cursor-pointer overflow-hidden ${isWebKitSafe ? "" : `transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}`}
+      style={{ aspectRatio: `${width} / ${height}` }}
+    >
+      {/* Pointer events stay on the stable wrapper above; this inner layer only wiggles visually,
+          so the hit-test box never moves and hover/invert state can't flicker from its own tilt. */}
+      <span ref={cardRef} className="absolute inset-0 block transform-3d will-change-transform">
+        <video
+          ref={ref}
+          muted
+          loop
+          playsInline
+          preload="none"
+          poster={posterUrl}
+          aria-label={label}
+          className="pointer-events-none block h-full w-full object-cover"
+          onLoadedData={() => {
+            if (isWebKitSafe && activeRef.current) setHasFirstFrame(true);
+          }}
         />
-      ) : null}
+        {isWebKitSafe ? (
+          <Image
+            src={posterUrl}
+            alt=""
+            aria-hidden="true"
+            width={width}
+            height={height}
+            sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
+            unoptimized
+            className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter] duration-150 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"} ${isActive && hasFirstFrame ? "opacity-0 transition-[filter,opacity]" : "opacity-100"}`}
+          />
+        ) : null}
+      </span>
     </span>
   );
 }

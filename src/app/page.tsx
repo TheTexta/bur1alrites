@@ -12,9 +12,8 @@ import {
 } from "@/lib/portfolio/config";
 import { detectRenderMode } from "@/lib/browser-render-mode";
 
-import { HeroVideo } from "./hero-video";
-import { HeroWordmarkRenderer } from "./hero-wordmark-renderer";
-import { ScrollBars } from "./scroll-bars";
+import { HeroScene } from "./hero-scene";
+import { VideoRoom } from "./video-room";
 import { VideoThumb } from "./video-thumb";
 import { listGalleryItems, type GalleryItem } from "@/lib/gallery";
 
@@ -55,88 +54,91 @@ export default async function StorageTestPage() {
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );
-  const heroPosterUrl = buildSupabaseStorageRenderUrl(
-    buildPortfolioVideoPosterPath("hero"),
-    { width: 1920, quality: 75 },
-  );
 
   return (
-    <>
-      <section className="relative z-10 h-svh w-full overflow-hidden bg-black isolate after:absolute after:inset-0 after:pointer-events-none after:bg-[linear-gradient(rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.15)_35%,rgba(0,0,0,0.75)_100%)]">
-        <HeroVideo
-          manifestUrl={heroManifestUrl}
-          posterUrl={heroPosterUrl}
-        />
-        <ScrollBars renderMode={renderMode} />
-      </section>
+    <main>
+      <section
+        aria-label="Portfolio reel"
+        className="relative z-10 h-svh w-full overflow-hidden isolate"
+      />
 
-      <HeroWordmarkRenderer renderMode={renderMode} />
+      <HeroScene manifestUrl={heroManifestUrl} />
 
-      <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
-        {media.map((item) => {
-          const path = buildPortfolioStoragePath(item.slug, item.extension);
-          const isVideo = item.extension === "mov";
-          const imageSrc = isVideo
-            ? null
-            : buildSupabaseStorageRenderUrl(path, {
-                width: 960,
-                quality: 75,
-              });
-          const manifestUrl = isVideo
-            ? buildSupabaseStoragePublicUrl(
-                buildPortfolioStreamManifestPath(item.slug),
-              )
-            : null;
-          const posterUrl = isVideo
-            ? buildSupabaseStorageRenderUrl(
-                buildPortfolioVideoPosterPath(item.slug),
-                { width: 960, quality: 75 },
-              )
-            : null;
+      <section aria-labelledby="portfolio-heading">
+        <h2 id="portfolio-heading" className="sr-only">
+          Selected work
+        </h2>
+        <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
+          {media.map((item) => {
+            const path = buildPortfolioStoragePath(item.slug, item.extension);
+            const isVideo = item.extension === "mov";
+            const imageSrc = isVideo
+              ? null
+              : buildSupabaseStorageRenderUrl(path, {
+                  width: 960,
+                  quality: 75,
+                });
+            const manifestUrl = isVideo
+              ? buildSupabaseStoragePublicUrl(
+                  buildPortfolioStreamManifestPath(item.slug),
+                )
+              : null;
+            const posterUrl = isVideo
+              ? buildSupabaseStorageRenderUrl(
+                  buildPortfolioVideoPosterPath(item.slug),
+                  { width: 960, quality: 75 },
+                )
+              : null;
 
-          return (
-            <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
-              <div className="relative block w-full text-inherit">
-                {isVideo ? (
-                  <VideoThumb
-                    manifestUrl={manifestUrl!}
-                    posterUrl={posterUrl!}
-                    width={item.width}
-                    height={item.height}
-                    label={item.title}
-                    renderMode={renderMode}
-                  />
-                ) : (
-                  <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">
-                    <Image
-                      src={imageSrc!}
-                      alt={item.title}
+            return (
+              <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
+                <div className="relative block w-full text-inherit">
+                  {isVideo ? (
+                    <VideoThumb
+                      manifestUrl={manifestUrl!}
+                      posterUrl={posterUrl!}
                       width={item.width}
                       height={item.height}
-                      quality={75}
-                      sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
-                      unoptimized
+                      label={`${item.title}, ${item.client}, ${item.type}, ${item.year}`}
+                      renderMode={renderMode}
                     />
+                  ) : (
+                    <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">
+                      <Image
+                        src={imageSrc!}
+                        alt={`${item.title}, ${item.client}, ${item.type}, ${item.year}`}
+                        width={item.width}
+                        height={item.height}
+                        quality={75}
+                        sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
+                        unoptimized
+                      />
+                    </span>
+                  )}
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-[5px] pb-[5px] leading-[1.35] text-white mix-blend-difference">
+                    <span className="flex min-w-0 flex-col">
+                      <span className="font-bold">{item.title}</span>
+                      <span>{item.client}</span>
+                    </span>
+                    <span className="flex min-w-0 flex-col items-end text-right">
+                      <span>{item.type}</span>
+                      <span>{item.year}</span>
+                    </span>
                   </span>
-                )}
-                <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-[5px] pb-[5px] leading-[1.35] text-white mix-blend-difference">
-                  <span className="flex min-w-0 flex-col">
-                    <span className="font-bold">{item.title}</span>
-                    <span>{item.client}</span>
-                  </span>
-                  <span className="flex min-w-0 flex-col items-end text-right">
-                    <span>{item.type}</span>
-                    <span>{item.year}</span>
-                  </span>
-                </span>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
-      <section id="contact" className="relative z-10 h-svh w-full">
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </section>
-    </>
+
+      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 h-svh w-full">
+        <h2 id="contact-heading" className="sr-only">
+          Contact bur1alrites
+        </h2>
+      </section>
+
+      <VideoRoom />
+    </main>
   );
 }

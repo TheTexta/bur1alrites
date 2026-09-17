@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+/* Tailwind v4 preflight resets buttons to cursor: default. */
+@layer base {
+	button:not(:disabled),
+	[role="button"]:not(:disabled),
+	label[for],
+	summary,
+	select:not(:disabled),
+	[type="checkbox"]:not(:disabled),
+	[type="radio"]:not(:disabled),
+	[type="file"]:not(:disabled),
+	[type="submit"]:not(:disabled),
+	[type="reset"]:not(:disabled) {
+		cursor: pointer;
+	}
+
+	button:disabled,
+	[type="submit"]:disabled,
+	[type="reset"]:disabled,
+	select:disabled {
+		cursor: not-allowed;
+	}
+}
+
 @font-face {
 	font-family: "AIx Darbotzcumi";
 	src: url("/fonts/AIxDB-CUMI.TTF") format("truetype");
