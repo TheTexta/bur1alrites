@@ -53,12 +53,11 @@ export default async function StorageTestPage() {
     listGalleryItems({ publishedOnly: true }).catch(() => null),
   ]);
   const renderMode = detectRenderMode(requestHeaders.get("user-agent"));
-  const initialSceneQuality = getInitialSceneQualityLevel(
-    detectMobileDevice(
-      requestHeaders.get("user-agent"),
-      requestHeaders.get("sec-ch-ua-mobile"),
-    ),
+  const isMobile = detectMobileDevice(
+    requestHeaders.get("user-agent"),
+    requestHeaders.get("sec-ch-ua-mobile"),
   );
+  const initialSceneQuality = getInitialSceneQualityLevel(isMobile);
   const media = galleryItems === null ? MEDIA : galleryItems;
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
@@ -101,6 +100,7 @@ export default async function StorageTestPage() {
           manifestUrl={heroManifestUrl}
           galleryItems={sceneMedia}
           preferNativeHls={renderMode === "webkit-safe"}
+          isMobile={isMobile}
         />
 
         {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
@@ -135,7 +135,10 @@ export default async function StorageTestPage() {
           <ContactLinks />
         </section>
 
-        <VideoRoom preferNativeHls={renderMode === "webkit-safe"} />
+        <VideoRoom
+          preferNativeHls={renderMode === "webkit-safe"}
+          isMobile={isMobile}
+        />
       </PageRestoreBoundary>
     </SceneQualityProvider>
   );

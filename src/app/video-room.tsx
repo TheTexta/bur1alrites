@@ -60,8 +60,10 @@ const walkPosition = new THREE.Vector3();
 const RECENTER_EASE = 0.12;
 const RECENTER_DONE_ANGLE = 0.002;
 
-function useWalkKeys() {
+function useWalkKeys(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
+
     const setKey = (code: string, pressed: boolean) => {
       const action = WALK_KEYS[code];
       if (action) walkState[action] = pressed;
@@ -85,12 +87,18 @@ function useWalkKeys() {
       window.removeEventListener("blur", reset);
       reset();
     };
-  }, []);
+  }, [enabled]);
 }
 
 // Clicking the canvas captures the cursor; mouse movement then aims the walker.
-function useMouseLook(domElement: HTMLCanvasElement, camera: THREE.PerspectiveCamera) {
+function useMouseLook(
+  domElement: HTMLCanvasElement,
+  camera: THREE.PerspectiveCamera,
+  enabled = true,
+) {
   useEffect(() => {
+    if (!enabled) return;
+
     const onClick = () => {
       if (document.pointerLockElement === domElement) return;
       // Chrome returns a promise that rejects when the gesture or document is ineligible.
@@ -133,14 +141,20 @@ function useMouseLook(domElement: HTMLCanvasElement, camera: THREE.PerspectiveCa
       document.removeEventListener("pointerlockchange", onLockChange);
       lookState.locked = false;
     };
-  }, [domElement, camera]);
+  }, [domElement, camera, enabled]);
 }
 
-function RoomRig({ layout }: { layout: ScreenLayout }) {
+function RoomRig({
+  layout,
+  pointerParallax,
+}: {
+  layout: ScreenLayout;
+  pointerParallax: boolean;
+}) {
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
   const size = useThree((state) => state.size);
   const domElement = useThree((state) => state.gl.domElement);
-  const pointer = usePointerPosition();
+  const pointer = usePointerPosition(pointerParallax);
   const target = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   const heading = useMemo(() => new THREE.Vector3(), []);
@@ -149,8 +163,8 @@ function RoomRig({ layout }: { layout: ScreenLayout }) {
   // Must be a camera: Object3D.lookAt aims +Z at the target, cameras look down -Z. Only used while recentering.
   const framer = useMemo(() => new THREE.Camera(), []);
 
-  useWalkKeys();
-  useMouseLook(domElement, camera);
+  useWalkKeys(pointerParallax);
+  useMouseLook(domElement, camera, pointerParallax);
 
   // Pull back far enough that the whole screen fits whichever axis is the tighter constraint.
   const distance = useMemo(() => {
@@ -191,8 +205,8 @@ function RoomRig({ layout }: { layout: ScreenLayout }) {
     // Camera drifts opposite the pointer and re-aims every frame off the eased position,
     // same as the hero scene, so rotation never lags behind the drift with a second ease.
     target.set(
-      -pointer.x * PARALLAX_STRENGTH,
-      layout.centerY + pointer.y * PARALLAX_STRENGTH,
+      -(pointerParallax ? pointer.x : 0) * PARALLAX_STRENGTH,
+      layout.centerY + (pointerParallax ? pointer.y : 0) * PARALLAX_STRENGTH,
       SCREEN_Z + distance,
     );
     lookAt.set(0, layout.centerY, SCREEN_Z);
@@ -221,6 +235,7 @@ function RoomScene({
   lightSampleInterval,
   preferNativeHls,
   recordFrameSample,
+  isMobile,
 }: {
   video: RoomVideo;
   mirrorResolutionScale: number;
@@ -228,6 +243,7 @@ function RoomScene({
   lightSampleInterval: number | null;
   preferNativeHls: boolean;
   recordFrameSample: (deltaMs: number, source: "video-room") => void;
+  isMobile: boolean;
 }) {
   const layout = useMemo(
     () => getScreenLayout(video.width / Math.max(video.height, 1)),
@@ -254,7 +270,7 @@ function RoomScene({
 
   return (
     <>
-      <RoomRig layout={layout} />
+      <RoomRig layout={layout} pointerParallax={!isMobile} />
       <MirrorFloor resolutionScale={mirrorResolutionScale} />
       <RoomShell />
       <ScreenPanel
@@ -276,7 +292,13 @@ function RoomScene({
   );
 }
 
-export function VideoRoom({ preferNativeHls }: { preferNativeHls: boolean }) {
+export function VideoRoom({
+  preferNativeHls,
+  isMobile,
+}: {
+  preferNativeHls: boolean;
+  isMobile: boolean;
+}) {
   const [video, setVideo] = useState<RoomVideo | null>(null);
   // Drives the crossfade: false both before entering and while leaving, true once faded in.
   const [visible, setVisible] = useState(false);
@@ -372,6 +394,7 @@ export function VideoRoom({ preferNativeHls }: { preferNativeHls: boolean }) {
             lightSampleInterval={quality.lightSampleInterval}
             preferNativeHls={preferNativeHls}
             recordFrameSample={recordFrameSample}
+            isMobile={isMobile}
           />
         </Canvas>
       ) : (
@@ -402,7 +425,7 @@ export function VideoRoom({ preferNativeHls }: { preferNativeHls: boolean }) {
         {video.label}
       </p>
 
-      {enabled ? (
+      {enabled && !isMobile ? (
         <p
           className={`pointer-events-none absolute inset-x-0 top-6 z-10 text-center text-[11px] uppercase tracking-wide text-white/40 transition-opacity duration-300 ${walking ? "opacity-0" : "opacity-100"}`}
         >

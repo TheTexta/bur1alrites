@@ -79,10 +79,12 @@ export const GRAIN_STRENGTH = 0.035;
 const pointerState = { x: 0, y: 0 };
 
 // Tracks the pointer in normalized (-1..1) viewport coordinates for camera-parallax rigs.
-export function usePointerPosition() {
+export function usePointerPosition(enabled = true) {
   const invalidate = useThree((state) => state.invalidate);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const onMove = (event: PointerEvent) => {
       pointerState.x = (event.clientX / window.innerWidth) * 2 - 1;
       pointerState.y = (event.clientY / window.innerHeight) * 2 - 1;
@@ -91,7 +93,7 @@ export function usePointerPosition() {
 
     window.addEventListener("pointermove", onMove, { passive: true });
     return () => window.removeEventListener("pointermove", onMove);
-  }, [invalidate]);
+  }, [enabled, invalidate]);
 
   return pointerState;
 }

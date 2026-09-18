@@ -119,13 +119,15 @@ function ScenePerformanceMonitor({
 function HeroRig({
   geometryRef,
   displacementProgressRef,
+  pointerParallax,
 }: {
   geometryRef: React.RefObject<WordmarkGeometry>;
   displacementProgressRef: React.RefObject<number>;
+  pointerParallax: boolean;
 }) {
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
   const size = useThree((state) => state.size);
-  const pointer = usePointerPosition();
+  const pointer = usePointerPosition(pointerParallax);
   const target = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
   // Framing distance comes from the un-scaled screen so the oversized one fills more of the frame.
@@ -163,8 +165,8 @@ function HeroRig({
     const eyeY = HERO_EYE_Y + (CONTACT_EYE_Y - HERO_EYE_Y) * contactProgress;
 
     target.set(
-      -pointer.x * PARALLAX_STRENGTH,
-      eyeY + pointer.y * PARALLAX_STRENGTH * PARALLAX_VERTICAL,
+      -(pointerParallax ? pointer.x : 0) * PARALLAX_STRENGTH,
+      eyeY + (pointerParallax ? pointer.y : 0) * PARALLAX_STRENGTH * PARALLAX_VERTICAL,
       SCREEN_Z + distance,
     );
     // r3f's documented pattern: mutate three.js objects (here, the camera) in useFrame instead of setState.
@@ -365,12 +367,14 @@ type HeroSceneProps = {
   manifestUrl: string;
   galleryItems: GallerySceneItem[];
   preferNativeHls: boolean;
+  isMobile: boolean;
 };
 
 export function HeroScene({
   manifestUrl,
   galleryItems,
   preferNativeHls,
+  isMobile,
 }: HeroSceneProps) {
   const geometryRef = useWordmarkGeometry();
   const displacementProgressRef = useRef(DISPLACEMENT_START);
@@ -400,6 +404,7 @@ export function HeroScene({
           <HeroRig
             geometryRef={geometryRef}
             displacementProgressRef={displacementProgressRef}
+            pointerParallax={!isMobile}
           />
           <ScenePerformanceMonitor recordFrameSample={recordFrameSample} />
           <MirrorFloor resolutionScale={quality.mirrorResolutionScale} />
