@@ -5,55 +5,10 @@ import { useEffect, useRef, useState } from "react";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
 import { attachHlsStream } from "@/lib/hls-stream";
-import { useReducedMotion } from "./scene-utils";
 import { openVideoRoom } from "./video-room";
 
 const ACTIVATE_PREVIEW_EVENT = "portfolio:activate-preview";
 const WEBKIT_PRELOAD_MARGIN = "25% 0px";
-// Wiggle stays subtle - this is a hover accent, not a full tilt-card effect.
-const TILT_MAX_DEG = 3;
-const TILT_EASE = 0.08;
-
-// Rotates a card toward the pointer's position on the whole viewport (not just over the card),
-// so every thumbnail wiggles together in a shared 3D placement as the pointer moves.
-function useCardTilt(ref: React.RefObject<HTMLElement | null>) {
-  const reducedMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (reducedMotion) return;
-
-    let raf = 0;
-    let targetX = 0;
-    let targetY = 0;
-    let currentX = 0;
-    let currentY = 0;
-
-    const onMove = (event: PointerEvent) => {
-      targetX = (event.clientX / window.innerWidth - 0.5) * 2 * TILT_MAX_DEG;
-      targetY = (event.clientY / window.innerHeight - 0.5) * 2 * TILT_MAX_DEG;
-    };
-
-    const tick = () => {
-      currentX += (targetX - currentX) * TILT_EASE;
-      currentY += (targetY - currentY) * TILT_EASE;
-      const el = ref.current;
-      if (el) {
-        el.style.transform = `perspective(900px) rotateX(${(-currentY).toFixed(2)}deg) rotateY(${currentX.toFixed(2)}deg)`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: true });
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      cancelAnimationFrame(raf);
-      const el = ref.current;
-      if (el) el.style.transform = "";
-    };
-  }, [ref, reducedMotion]);
-}
 
 type StreamController = Awaited<ReturnType<typeof attachHlsStream>>;
 
@@ -75,7 +30,6 @@ export function VideoThumb({
   renderMode,
 }: VideoThumbProps) {
   const ref = useRef<HTMLVideoElement>(null);
-  const cardRef = useRef<HTMLSpanElement>(null);
   const activeRef = useRef(false);
   const nearViewportRef = useRef(false);
   const controllerRef = useRef<StreamController | null>(null);
@@ -84,8 +38,6 @@ export function VideoThumb({
   const [isActive, setIsActive] = useState(false);
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
   const isWebKitSafe = renderMode === "webkit-safe";
-
-  useCardTilt(cardRef);
 
   useEffect(() => {
     function handlePreviewActivation(event: Event) {
@@ -303,9 +255,9 @@ export function VideoThumb({
       className={`relative block min-h-[60px] w-full cursor-pointer overflow-hidden ${isWebKitSafe ? "" : `transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}`}
       style={{ aspectRatio: `${width} / ${height}` }}
     >
-      {/* Pointer events stay on the stable wrapper above; this inner layer only wiggles visually,
-          so the hit-test box never moves and hover/invert state can't flicker from its own tilt. */}
-      <span ref={cardRef} className="absolute inset-0 block transform-3d will-change-transform">
+      {/* Pointer events stay on the wrapper above, so the hit-test box never moves and
+          hover/invert state can't flicker. */}
+      <span className="absolute inset-0 block">
         <video
           ref={ref}
           muted

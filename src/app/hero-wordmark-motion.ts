@@ -1,5 +1,21 @@
 export const GLASS_TARGET_ID = "contact";
 
+// Page-space tops of the gallery grid and the contact block, read straight from the live DOM.
+export function measureSections() {
+  const contact = document.getElementById(GLASS_TARGET_ID);
+  const gallery = contact?.previousElementSibling;
+
+  return {
+    galleryTop: gallery ? gallery.getBoundingClientRect().top + window.scrollY : window.innerHeight,
+    contactTop: contact ? contact.getBoundingClientRect().top + window.scrollY : Number.POSITIVE_INFINITY,
+  };
+}
+
+export function observedSections() {
+  const contact = document.getElementById(GLASS_TARGET_ID);
+  return [contact, contact?.previousElementSibling].filter((node): node is Element => node instanceof Element);
+}
+
 const GLOW_CURVE = 20;
 const TEXT_BLUR_START_COVERAGE = 0.45;
 const TEXT_BLUR_CURVE = 3;

@@ -5,14 +5,10 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { EffectPass, type EffectComposer as EffectComposerImpl } from "postprocessing";
 import * as THREE from "three";
-import { Reflector } from "three/examples/jsm/objects/Reflector.js";
-import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 
-import { attachHlsStream } from "@/lib/hls-stream";
-import { GRAIN_STRENGTH, usePointerPosition, useRenderingEnabled } from "./scene-utils";
-
-// Required once before any RectAreaLight can shade correctly.
-RectAreaLightUniformsLib.init();
+import { usePointerPosition, useRenderingEnabled } from "./scene-utils";
+import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
+import { FLOOR_SIZE, FLOOR_Y, SCREEN_Z, getScreenLayout, type ScreenLayout } from "./scene-layout";
 
 export const OPEN_ROOM_EVENT = "portfolio:open-room";
 
@@ -28,38 +24,11 @@ export function openVideoRoom(detail: RoomVideo) {
   window.dispatchEvent(new CustomEvent<RoomVideo>(OPEN_ROOM_EVENT, { detail }));
 }
 
-const FLOOR_SIZE = 160;
-const FLOOR_Y = -6;
-// Tints the mirrored render, keeping the reflection darker than the screen itself.
-const FLOOR_TINT = 0x4c5a5e;
-const CEILING_Y = FLOOR_Y + 42;
-// Dark and rough so the screen's RectAreaLight reads as the only real light source in the room.
-const WALL_COLOR = 0x141414;
-const SCREEN_MAX_WIDTH = 22;
-const SCREEN_MAX_HEIGHT = 12;
-// Clearance between the bottom of the screen and the mirror.
-const SCREEN_FLOOR_GAP = 1.2;
 // Headroom left around the screen so pointer drift never pushes an edge out of frame.
 const FIT_MARGIN = 1.2;
-const SCREEN_Z = -30;
 const CAMERA_Z = 6;
 const PARALLAX_STRENGTH = 2.4;
 const PARALLAX_EASE = 0.06;
-const SCREEN_LIGHT_INTENSITY = 26;
-// Dark footage still throws some light, so the room never goes fully black.
-const SCREEN_LIGHT_FLOOR = 0.02;
-// Frames between video samples, and the size of the square the frame is downscaled to.
-const SAMPLE_INTERVAL = 4;
-const SAMPLE_SIZE = 8;
-const LIGHT_EASE = 0.15;
-// Additive highlight boost: scales with color^HIGHLIGHT_POWER, so near-black pixels get
-// almost nothing added while bright pixels get pushed past Bloom's threshold.
-const HIGHLIGHT_GAIN = 2.5;
-const HIGHLIGHT_POWER = 3.0;
-// Grain is zero-mean, but negative offsets clip at black while positive ones don't - net lifting
-// shadows. This curve darkens back down below SHADOW_KNEE only, leaving highlights/bloom alone.
-const SHADOW_KNEE = 0.10;
-const SHADOW_DARKEN = 0.015;
 // Duration of the fade-to-black crossfade when opening/closing the room, in ms - must match the
 // transition-duration class applied to the dialog below.
 const FADE_MS = 500;
@@ -116,15 +85,6 @@ function useWalkKeys() {
       reset();
     };
   }, []);
-}
-
-type ScreenLayout = { width: number; height: number; centerY: number };
-
-// Portrait clips are height-bound and landscape clips width-bound, so both limits apply.
-function getScreenLayout(aspect: number): ScreenLayout {
-  const width = Math.min(SCREEN_MAX_WIDTH, SCREEN_MAX_HEIGHT * aspect);
-  const height = width / aspect;
-  return { width, height, centerY: FLOOR_Y + SCREEN_FLOOR_GAP + height / 2 };
 }
 
 // Clicking the canvas captures the cursor; mouse movement then aims the walker.
@@ -251,215 +211,6 @@ function RoomRig({ layout }: { layout: ScreenLayout }) {
   });
 
   return null;
-}
-
-function MirrorFloor() {
-  const size = useThree((state) => state.size);
-  const dpr = useThree((state) => state.viewport.dpr);
-
-  const reflector = useMemo(() => {
-    const geometry = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
-    const mirror = new Reflector(geometry, {
-      clipBias: 0.003,
-      textureWidth: size.width * dpr,
-      textureHeight: size.height * dpr,
-      color: FLOOR_TINT,
-    });
-    mirror.rotation.x = -Math.PI / 2;
-    mirror.position.y = FLOOR_Y;
-    return mirror;
-  }, [size.width, size.height, dpr]);
-
-  useEffect(
-    () => () => {
-      reflector.geometry.dispose();
-      reflector.dispose();
-    },
-    [reflector],
-  );
-
-  return <primitive object={reflector} />;
-}
-
-function RoomShell() {
-  const roomHalf = FLOOR_SIZE / 2;
-  const wallHeight = CEILING_Y - FLOOR_Y;
-  const wallCenterY = FLOOR_Y + wallHeight / 2;
-
-  return (
-    <group>
-      {/* Normal faces down, into the room. */}
-      <mesh position={[0, CEILING_Y, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[FLOOR_SIZE, FLOOR_SIZE]} />
-        <meshStandardMaterial color={WALL_COLOR} roughness={1} metalness={0} />
-      </mesh>
-      {/* Back wall behind the screen; default plane normal (+Z) already faces into the room. */}
-      <mesh position={[0, wallCenterY, -roomHalf]}>
-        <planeGeometry args={[FLOOR_SIZE, wallHeight]} />
-        <meshStandardMaterial color={WALL_COLOR} roughness={1} metalness={0} />
-      </mesh>
-      <mesh position={[-roomHalf, wallCenterY, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[FLOOR_SIZE, wallHeight]} />
-        <meshStandardMaterial color={WALL_COLOR} roughness={1} metalness={0} />
-      </mesh>
-      <mesh position={[roomHalf, wallCenterY, 0]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[FLOOR_SIZE, wallHeight]} />
-        <meshStandardMaterial color={WALL_COLOR} roughness={1} metalness={0} />
-      </mesh>
-    </group>
-  );
-}
-
-function ScreenPanel({ manifestUrl, layout }: { manifestUrl: string; layout: ScreenLayout }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const lightRef = useRef<THREE.RectAreaLight>(null);
-  const samplerRef = useRef<CanvasRenderingContext2D | null>(null);
-  const frameRef = useRef(0);
-  const sampledColor = useMemo(() => new THREE.Color(1, 1, 1), []);
-  const grainShaderRef = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
-
-  useEffect(() => {
-    // Rect area lights are unlit until their LTC lookup textures are loaded.
-    RectAreaLightUniformsLib.init();
-
-    const sampler = document.createElement("canvas");
-    sampler.width = SAMPLE_SIZE;
-    sampler.height = SAMPLE_SIZE;
-    samplerRef.current = sampler.getContext("2d", { willReadFrequently: true });
-
-    return () => {
-      samplerRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
-    const video = document.createElement("video");
-    video.muted = true;
-    video.loop = true;
-    video.playsInline = true;
-    video.preload = "auto";
-    video.crossOrigin = "anonymous";
-    videoRef.current = video;
-
-    const texture = new THREE.VideoTexture(video);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    // Built-in material so three handles the texture's colour space for the composer.
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      toneMapped: false,
-      // Harmless fallback for the (non-post-processed) direct render path; see EffectPass.dithering above for the real fix.
-      dithering: true,
-    });
-    // Highlight-only boost so shadows stay put while bright areas clear the Bloom threshold,
-    // plus animated grain to mask compression artifacts and sell the projector feel.
-    material.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = { value: 0 };
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          "#include <common>",
-          `#include <common>
-          uniform float uTime;
-          float grainHash(vec2 p) {
-            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453 + uTime);
-          }`,
-        )
-        .replace(
-          "#include <map_fragment>",
-          `#include <map_fragment>
-          diffuseColor.rgb += pow(diffuseColor.rgb, vec3(${HIGHLIGHT_POWER.toFixed(1)})) * ${HIGHLIGHT_GAIN.toFixed(1)};
-          diffuseColor.rgb += (grainHash(gl_FragCoord.xy) - 0.5) * ${GRAIN_STRENGTH.toFixed(3)};
-          float shadowMask = 1.0 - smoothstep(0.0, ${SHADOW_KNEE.toFixed(2)}, dot(diffuseColor.rgb, vec3(0.333)));
-          diffuseColor.rgb = max(diffuseColor.rgb - ${SHADOW_DARKEN.toFixed(3)} * shadowMask, 0.0);`,
-        );
-      grainShaderRef.current = shader;
-    };
-    mesh.material = material;
-
-    let controller: Awaited<ReturnType<typeof attachHlsStream>> | null = null;
-    let cancelled = false;
-
-    void attachHlsStream(video, manifestUrl, { startLevel: 0 })
-      .then((nextController) => {
-        if (cancelled) {
-          nextController.destroy();
-          return;
-        }
-        controller = nextController;
-        void video.play().catch(() => {});
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      controller?.destroy();
-      texture.dispose();
-      (mesh.material as THREE.Material | undefined)?.dispose();
-      grainShaderRef.current = null;
-    };
-  }, [manifestUrl]);
-
-  useFrame((state) => {
-    if (grainShaderRef.current) grainShaderRef.current.uniforms.uTime.value = state.clock.elapsedTime;
-
-    frameRef.current += 1;
-    if (frameRef.current % SAMPLE_INTERVAL !== 0) return;
-
-    const video = videoRef.current;
-    const light = lightRef.current;
-    const context = samplerRef.current;
-    if (!video || !light || !context || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-
-    let red = 0;
-    let green = 0;
-    let blue = 0;
-    try {
-      context.drawImage(video, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-      const pixels = context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-      for (let i = 0; i < pixels.length; i += 4) {
-        // Linearise each sample so the average matches how the renderer treats light.
-        red += (pixels[i] / 255) ** 2.2;
-        green += (pixels[i + 1] / 255) ** 2.2;
-        blue += (pixels[i + 2] / 255) ** 2.2;
-      }
-    } catch {
-      // A tainted frame just leaves the previous lighting in place.
-      return;
-    }
-
-    const count = SAMPLE_SIZE * SAMPLE_SIZE;
-    red /= count;
-    green /= count;
-    blue /= count;
-
-    const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-    // Linear means are tiny for dark footage; the perceptual curve keeps the spill visible.
-    const brightness = SCREEN_LIGHT_FLOOR + luminance ** (1 / 2.2);
-    // Normalise hue away from brightness so dim frames keep their colour instead of going black.
-    const peak = Math.max(red, green, blue, 0.0001);
-    sampledColor.setRGB(red / peak, green / peak, blue / peak);
-
-    // r3f's documented pattern: mutate three.js objects in useFrame instead of setState.
-    light.color.lerp(sampledColor, LIGHT_EASE);
-    light.intensity = THREE.MathUtils.lerp(light.intensity, brightness * SCREEN_LIGHT_INTENSITY, LIGHT_EASE);
-  });
-
-  return (
-    <group position={[0, layout.centerY, SCREEN_Z]}>
-      <mesh ref={meshRef}>
-        <planeGeometry args={[layout.width, layout.height]} />
-      </mesh>
-      {/* The screen is the only light source; rotated so the panel emits toward the camera. */}
-      <rectAreaLight
-        ref={lightRef}
-        args={[0xffffff, 0, layout.width, layout.height]}
-        rotation={[0, Math.PI, 0]}
-      />
-    </group>
-  );
 }
 
 function RoomScene({ video }: { video: RoomVideo }) {

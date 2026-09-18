@@ -11,6 +11,7 @@ import {
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
 import { detectRenderMode } from "@/lib/browser-render-mode";
+import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
 
 import { HeroScene } from "./hero-scene";
 import { VideoRoom } from "./video-room";
@@ -64,11 +65,14 @@ export default async function StorageTestPage() {
 
       <HeroScene manifestUrl={heroManifestUrl} />
 
+      {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
       <section aria-labelledby="portfolio-heading">
         <h2 id="portfolio-heading" className="sr-only">
           Selected work
         </h2>
-        <div className="relative z-10 columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4">
+        <div
+          className="relative z-10 mx-auto w-[min(86vw,1600px)] columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4"
+        >
           {media.map((item) => {
             const path = buildPortfolioStoragePath(item.slug, item.extension);
             const isVideo = item.extension === "mov";
@@ -132,10 +136,30 @@ export default async function StorageTestPage() {
         </div>
       </section>
 
-      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 h-svh w-full">
+      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full pb-[20vh]">
         <h2 id="contact-heading" className="sr-only">
           Contact bur1alrites
         </h2>
+        {/* Pushed near the bottom of the frame so it clears the statue the camera tilts down onto. */}
+        <ul
+          className="mx-auto m-0 flex w-[min(86vw,1600px)] list-none flex-col items-center gap-2 p-0 pt-[78svh] text-center text-[clamp(14px,1.4vw,20px)] uppercase text-white"
+        >
+          <li>
+            <a className="underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              {CONTACT_EMAIL}
+            </a>
+          </li>
+          <li>
+            <a
+              className="underline-offset-4 hover:underline"
+              href={CONTACT_INSTAGRAM}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              @bur1alrites
+            </a>
+          </li>
+        </ul>
       </section>
 
       <VideoRoom />
