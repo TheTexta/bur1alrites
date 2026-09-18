@@ -22,7 +22,8 @@ import {
   getScrollRise,
   screenFitDistance,
 } from "./scene-layout";
-import { useRenderingEnabled, usePointerPosition } from "./scene-utils";
+import { useRenderingEnabled, usePointerPosition, useVideoRoomOpen } from "./scene-utils";
+import { recordFrameSample, useSceneQuality } from "./scene-quality";
 
 const WORDMARK = "bur1alrites";
 const WORDMARK_FONT = "/fonts/AIxDB-CUMI.TTF";
@@ -98,6 +99,16 @@ function currentRise(geometryRef: React.RefObject<WordmarkGeometry>) {
     __rise: { ...rise, scrollEndProgress, geom: geometryRef.current, scrollY },
   });
   return { ...rise, scrollEndProgress };
+}
+
+// Feeds the hero Canvas's frame time to the automatic quality controller - this Canvas is the
+// heaviest, most persistent workload on the page (mirror/bloom/displacement render regardless of
+// scroll position), so it's the right signal for both downgrades and upgrades.
+function ScenePerformanceMonitor() {
+  useFrame((_, delta) => {
+    recordFrameSample(delta * 1000);
+  });
+  return null;
 }
 
 // The camera holds still at the screen's centre, then drops and tilts down onto the statue at the end.
@@ -191,7 +202,13 @@ function FloorLogo() {
   );
 }
 
-function WordmarkGlyphs({ geometryRef }: { geometryRef: React.RefObject<WordmarkGeometry> }) {
+function WordmarkGlyphs({
+  geometryRef,
+  wideBloomLevels,
+}: {
+  geometryRef: React.RefObject<WordmarkGeometry>;
+  wideBloomLevels: number | null;
+}) {
   const textRef = useRef<TroikaTextMesh>(null);
   const wordmarkGroupRef = useRef<THREE.Group>(null);
   const sideGroupRef = useRef<THREE.Group>(null);
@@ -316,15 +333,17 @@ function WordmarkGlyphs({ geometryRef }: { geometryRef: React.RefObject<Wordmark
           levels={7}
           radius={0.75}
         />
-        <Bloom
-          ref={wideBloomRef}
-          mipmapBlur
-          luminanceThreshold={1.02}
-          luminanceSmoothing={0.3}
-          intensity={0.06}
-          levels={11}
-          radius={1.0}
-        />
+        {wideBloomLevels !== null ? (
+          <Bloom
+            ref={wideBloomRef}
+            mipmapBlur
+            luminanceThreshold={1.02}
+            luminanceSmoothing={0.3}
+            intensity={0.06}
+            levels={wideBloomLevels}
+            radius={1.0}
+          />
+        ) : null}
       </EffectComposer>
     </>
   );
@@ -352,6 +371,8 @@ export function HeroScene({
   const geometryRef = useWordmarkGeometry();
   const displacementProgressRef = useRef(DISPLACEMENT_START);
   const enabled = useRenderingEnabled();
+  const roomOpen = useVideoRoomOpen();
+  const quality = useSceneQuality();
   const screenLayout = useMemo(() => getHeroScreenLayout(), []);
 
   return (
@@ -363,28 +384,34 @@ export function HeroScene({
         <Canvas
           className="pointer-events-none z-10"
           style={{ position: "fixed", inset: 0 }}
-          dpr={[1, 2]}
+          dpr={quality.dpr}
+          // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
           camera={{ position: [0, 0, SCREEN_Z + 30], fov: HERO_FOV, near: 0.1, far: 400 }}
+          // VideoRoom fully covers this canvas once open, so freeze the last frame instead of burning GPU behind it.
+          frameloop={roomOpen ? "never" : "always"}
           aria-hidden="true"
         >
           <HeroRig
             geometryRef={geometryRef}
             displacementProgressRef={displacementProgressRef}
           />
-          <MirrorFloor />
+          <ScenePerformanceMonitor />
+          <MirrorFloor resolutionScale={quality.mirrorResolutionScale} />
           <RoomShell />
           <ScreenPanel
             manifestUrl={manifestUrl}
             layout={screenLayout}
             displaced
             displacementProgressRef={displacementProgressRef}
+            segments={quality.screenSegments}
+            displacementDirections={quality.displacementDirections}
           />
           <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
           <Suspense fallback={null}>
             <FloorLogo />
           </Suspense>
-          <WordmarkGlyphs geometryRef={geometryRef} />
+          <WordmarkGlyphs geometryRef={geometryRef} wideBloomLevels={quality.wideBloomLevels} />
         </Canvas>
       ) : (
         <StaticWordmark />

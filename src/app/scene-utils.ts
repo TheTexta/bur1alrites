@@ -51,6 +51,26 @@ export function useReducedMotion() {
   return useSyncExternalStore(subscribeToReducedMotionChange, prefersReducedMotion, getServerRenderCapabilitySnapshot);
 }
 
+// Lets the fully-obscured HeroScene canvas know to stop rendering while VideoRoom covers it,
+// without unmounting it (which would flash a blank frame when the room closes).
+const videoRoomOpenState = { open: false };
+const videoRoomOpenListeners = new Set<() => void>();
+
+export function setVideoRoomOpen(open: boolean) {
+  if (videoRoomOpenState.open === open) return;
+  videoRoomOpenState.open = open;
+  videoRoomOpenListeners.forEach((listener) => listener());
+}
+
+function subscribeToVideoRoomOpen(callback: () => void) {
+  videoRoomOpenListeners.add(callback);
+  return () => videoRoomOpenListeners.delete(callback);
+}
+
+export function useVideoRoomOpen() {
+  return useSyncExternalStore(subscribeToVideoRoomOpen, () => videoRoomOpenState.open, () => false);
+}
+
 // Shared between the video room's screen shader grain (video-room.tsx) and the gallery preview
 // grain overlay (gallery-grain.tsx) so both use the exact same noise strength.
 export const GRAIN_STRENGTH = 0.035;

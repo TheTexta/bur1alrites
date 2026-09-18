@@ -47,7 +47,7 @@ const SPLASH_DISPLACEMENT_WIDTH = 0.08;
 const SPLASH_DISPLACEMENT_STRENGTH = 2.2;
 const SPLASH_DURATION = 1.3;
 
-export function MirrorFloor() {
+export function MirrorFloor({ resolutionScale = 1 }: { resolutionScale?: number }) {
   const size = useThree((state) => state.size);
   const dpr = useThree((state) => state.viewport.dpr);
 
@@ -55,14 +55,14 @@ export function MirrorFloor() {
     const geometry = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
     const mirror = new Reflector(geometry, {
       clipBias: 0.003,
-      textureWidth: size.width * dpr,
-      textureHeight: size.height * dpr,
+      textureWidth: size.width * dpr * resolutionScale,
+      textureHeight: size.height * dpr * resolutionScale,
       color: FLOOR_TINT,
     });
     mirror.rotation.x = -Math.PI / 2;
     mirror.position.y = FLOOR_Y;
     return mirror;
-  }, [size.width, size.height, dpr]);
+  }, [size.width, size.height, dpr, resolutionScale]);
 
   useEffect(
     () => () => {
@@ -110,15 +110,20 @@ export function ScreenPanel({
   displaced = false,
   displacementProgressRef,
   playingRef,
+  segments = SCREEN_SEGMENTS,
+  displacementDirections = 8,
 }: {
   manifestUrl: string;
   layout: ScreenLayout;
   displaced?: boolean;
   displacementProgressRef?: React.RefObject<number>;
   playingRef?: React.RefObject<boolean>;
+  segments?: number;
+  displacementDirections?: number;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const textureRef = useRef<THREE.VideoTexture | null>(null);
   const lightRef = useRef<THREE.RectAreaLight>(null);
   const samplerRef = useRef<CanvasRenderingContext2D | null>(null);
   const frameRef = useRef(0);
@@ -188,10 +193,9 @@ export function ScreenPanel({
     };
   }, []);
 
+  // Owns the <video>/HLS lifecycle only, so quality changes that only affect the shader
+  // (displacementDirections) never tear down and restart the stream.
   useEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
     const video = document.createElement("video");
     video.muted = true;
     video.loop = true;
@@ -202,6 +206,36 @@ export function ScreenPanel({
 
     const texture = new THREE.VideoTexture(video);
     texture.colorSpace = THREE.SRGBColorSpace;
+    textureRef.current = texture;
+
+    let controller: Awaited<ReturnType<typeof attachHlsStream>> | null = null;
+    let cancelled = false;
+
+    void attachHlsStream(video, manifestUrl, { startLevel: 0 })
+      .then((nextController) => {
+        if (cancelled) {
+          nextController.destroy();
+          return;
+        }
+        controller = nextController;
+        void video.play().catch(() => {});
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      controller?.destroy();
+      texture.dispose();
+      textureRef.current = null;
+      videoRef.current = null;
+    };
+  }, [manifestUrl]);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    const texture = textureRef.current;
+    if (!mesh || !texture) return;
+
     // Built-in material so three handles the texture's colour space for the composer.
     const material = new THREE.MeshBasicMaterial({
       map: texture,
@@ -244,15 +278,19 @@ export function ScreenPanel({
             }
 
             // Vertex texture fetch always reads mip 0, so the blur has to be an explicit tap kernel.
+            // Ring weight is fixed at 0.8 total (split 60/40 near/far) regardless of tap count, so
+            // lower-quality presets with fewer directions still normalize to the same brightness.
             float blurredLuminance(vec2 p) {
-              float total = screenLuminance(p) * 0.2;
-              for (int i = 0; i < 8; i++) {
-                float angle = float(i) * 0.7853981634;
+              ${displacementDirections > 0
+                ? `float total = screenLuminance(p) * 0.2;
+              for (int i = 0; i < ${displacementDirections}; i++) {
+                float angle = float(i) * ${((2 * Math.PI) / displacementDirections).toFixed(6)};
                 vec2 direction = vec2(cos(angle), sin(angle));
-                total += screenLuminance(p + direction * ${SCREEN_DISPLACEMENT_BLUR.toFixed(3)} * 0.5) * 0.06;
-                total += screenLuminance(p + direction * ${SCREEN_DISPLACEMENT_BLUR.toFixed(3)}) * 0.04;
+                total += screenLuminance(p + direction * ${SCREEN_DISPLACEMENT_BLUR.toFixed(3)} * 0.5) * ${((0.8 / displacementDirections) * 0.6).toFixed(4)};
+                total += screenLuminance(p + direction * ${SCREEN_DISPLACEMENT_BLUR.toFixed(3)}) * ${((0.8 / displacementDirections) * 0.4).toFixed(4)};
               }
-              return total;
+              return total;`
+                : `return screenLuminance(p);`}
             }
 
             float screenDistance(vec2 a, vec2 b) {
@@ -311,28 +349,11 @@ export function ScreenPanel({
     };
     mesh.material = material;
 
-    let controller: Awaited<ReturnType<typeof attachHlsStream>> | null = null;
-    let cancelled = false;
-
-    void attachHlsStream(video, manifestUrl, { startLevel: 0 })
-      .then((nextController) => {
-        if (cancelled) {
-          nextController.destroy();
-          return;
-        }
-        controller = nextController;
-        void video.play().catch(() => {});
-      })
-      .catch(() => {});
-
     return () => {
-      cancelled = true;
-      controller?.destroy();
-      texture.dispose();
       (mesh.material as THREE.Material | undefined)?.dispose();
       grainShaderRef.current = null;
     };
-  }, [manifestUrl, displaced, displacementProgressRef, layout.width, layout.height]);
+  }, [manifestUrl, displaced, displacementProgressRef, layout.width, layout.height, displacementDirections]);
 
   useFrame((state, delta) => {
     const shader = grainShaderRef.current;
@@ -440,7 +461,7 @@ export function ScreenPanel({
         <planeGeometry
           args={
             displaced
-              ? [layout.width, layout.height, SCREEN_SEGMENTS, SCREEN_SEGMENTS]
+              ? [layout.width, layout.height, segments, segments]
               : [layout.width, layout.height]
           }
         />

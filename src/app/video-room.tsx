@@ -6,7 +6,8 @@ import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { EffectPass, type EffectComposer as EffectComposerImpl } from "postprocessing";
 import * as THREE from "three";
 
-import { usePointerPosition, useRenderingEnabled } from "./scene-utils";
+import { setVideoRoomOpen, usePointerPosition, useRenderingEnabled } from "./scene-utils";
+import { useSceneQuality } from "./scene-quality";
 import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
 import { FLOOR_SIZE, FLOOR_Y, SCREEN_Z, getScreenLayout, type ScreenLayout } from "./scene-layout";
 
@@ -213,7 +214,15 @@ function RoomRig({ layout }: { layout: ScreenLayout }) {
   return null;
 }
 
-function RoomScene({ video }: { video: RoomVideo }) {
+function RoomScene({
+  video,
+  mirrorResolutionScale,
+  wideBloomLevels,
+}: {
+  video: RoomVideo;
+  mirrorResolutionScale: number;
+  wideBloomLevels: number | null;
+}) {
   const layout = useMemo(
     () => getScreenLayout(video.width / Math.max(video.height, 1)),
     [video.width, video.height],
@@ -236,14 +245,16 @@ function RoomScene({ video }: { video: RoomVideo }) {
   return (
     <>
       <RoomRig layout={layout} />
-      <MirrorFloor />
+      <MirrorFloor resolutionScale={mirrorResolutionScale} />
       <RoomShell />
       <ScreenPanel manifestUrl={video.manifestUrl} layout={layout} />
       {/* Two bloom passes: a tighter near-field glow plus a very faint, wide tail so the falloff to
           black is imperceptible instead of hitting mipmapBlur's finite mip-chain radius as a hard edge. */}
       <EffectComposer ref={composerRef} frameBufferType={THREE.HalfFloatType}>
         <Bloom mipmapBlur luminanceThreshold={1.0} luminanceSmoothing={0.5} intensity={0.4} levels={8} radius={0.75} />
-        <Bloom mipmapBlur luminanceThreshold={1.0} luminanceSmoothing={0.5} intensity={0.08} levels={11} radius={1.0} />
+        {wideBloomLevels !== null ? (
+          <Bloom mipmapBlur luminanceThreshold={1.0} luminanceSmoothing={0.5} intensity={0.08} levels={wideBloomLevels} radius={1.0} />
+        ) : null}
       </EffectComposer>
     </>
   );
@@ -255,6 +266,7 @@ export function VideoRoom() {
   const [visible, setVisible] = useState(false);
   const [walking, setWalking] = useState(false);
   const enabled = useRenderingEnabled();
+  const quality = useSceneQuality();
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -269,6 +281,11 @@ export function VideoRoom() {
     document.addEventListener("pointerlockchange", onLockChange);
     return () => document.removeEventListener("pointerlockchange", onLockChange);
   }, []);
+
+  // The hero scene sits fully behind this dialog once it's open, so pause its render loop too.
+  useEffect(() => {
+    setVideoRoomOpen(video !== null);
+  }, [video]);
 
   useEffect(() => {
     const onOpen = (event: Event) => {
@@ -325,12 +342,17 @@ export function VideoRoom() {
       {enabled ? (
         <Canvas
           style={{ position: "absolute", inset: 0, cursor: walking ? "none" : "pointer" }}
-          dpr={[1, 2]}
+          dpr={quality.dpr}
+          // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
           gl={{ antialias: true, powerPreference: "high-performance" }}
           camera={{ position: [0, 0, CAMERA_Z], fov: 38, near: 0.1, far: 200 }}
           aria-hidden="true"
         >
-          <RoomScene video={video} />
+          <RoomScene
+            video={video}
+            mirrorResolutionScale={quality.mirrorResolutionScale}
+            wideBloomLevels={quality.wideBloomLevels}
+          />
         </Canvas>
       ) : (
         <video
