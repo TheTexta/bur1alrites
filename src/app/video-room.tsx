@@ -7,7 +7,7 @@ import { EffectPass, type EffectComposer as EffectComposerImpl } from "postproce
 import * as THREE from "three";
 
 import { setVideoRoomOpen, usePointerPosition, useRenderingEnabled } from "./scene-utils";
-import { useSceneQuality } from "./scene-quality";
+import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
 import { FLOOR_SIZE, FLOOR_Y, SCREEN_Z, getScreenLayout, type ScreenLayout } from "./scene-layout";
 
@@ -218,10 +218,16 @@ function RoomScene({
   video,
   mirrorResolutionScale,
   wideBloomLevels,
+  lightSampleInterval,
+  preferNativeHls,
+  recordFrameSample,
 }: {
   video: RoomVideo;
   mirrorResolutionScale: number;
   wideBloomLevels: number | null;
+  lightSampleInterval: number | null;
+  preferNativeHls: boolean;
+  recordFrameSample: (deltaMs: number, source: "video-room") => void;
 }) {
   const layout = useMemo(
     () => getScreenLayout(video.width / Math.max(video.height, 1)),
@@ -242,12 +248,22 @@ function RoomScene({
     }
   });
 
+  useFrame((_, delta) => {
+    recordFrameSample(delta * 1000, "video-room");
+  });
+
   return (
     <>
       <RoomRig layout={layout} />
       <MirrorFloor resolutionScale={mirrorResolutionScale} />
       <RoomShell />
-      <ScreenPanel manifestUrl={video.manifestUrl} layout={layout} />
+      <ScreenPanel
+        manifestUrl={video.manifestUrl}
+        layout={layout}
+        lightSampleInterval={lightSampleInterval}
+        preferNativeHls={preferNativeHls}
+        telemetrySource="video-room"
+      />
       {/* Two bloom passes: a tighter near-field glow plus a very faint, wide tail so the falloff to
           black is imperceptible instead of hitting mipmapBlur's finite mip-chain radius as a hard edge. */}
       <EffectComposer ref={composerRef} frameBufferType={THREE.HalfFloatType}>
@@ -260,13 +276,14 @@ function RoomScene({
   );
 }
 
-export function VideoRoom() {
+export function VideoRoom({ preferNativeHls }: { preferNativeHls: boolean }) {
   const [video, setVideo] = useState<RoomVideo | null>(null);
   // Drives the crossfade: false both before entering and while leaving, true once faded in.
   const [visible, setVisible] = useState(false);
   const [walking, setWalking] = useState(false);
   const enabled = useRenderingEnabled();
   const quality = useSceneQuality();
+  const recordFrameSample = useSceneFrameRecorder();
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -352,6 +369,9 @@ export function VideoRoom() {
             video={video}
             mirrorResolutionScale={quality.mirrorResolutionScale}
             wideBloomLevels={quality.wideBloomLevels}
+            lightSampleInterval={quality.lightSampleInterval}
+            preferNativeHls={preferNativeHls}
+            recordFrameSample={recordFrameSample}
           />
         </Canvas>
       ) : (

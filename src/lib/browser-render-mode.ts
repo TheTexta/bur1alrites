@@ -6,6 +6,15 @@ const MOBILE_MARKER = /\bMobile(?:\/|\b)/i;
 const DESKTOP_SAFARI = /\bVersion\/\d+(?:\.\d+)*.*\bSafari\//i;
 const CHROMIUM_FAMILY = /\b(?:Chrom(?:e|ium)|CriOS|Edg(?:e|A|iOS)?|OPR|Opera|SamsungBrowser)\//i;
 
+export function detectMobileDevice(
+  userAgent: string | null | undefined,
+  clientHintMobile?: string | null,
+) {
+  if (clientHintMobile === "?1") return true;
+  if (!userAgent) return false;
+  return /\b(?:Android|iPhone|iPad|iPod|Mobile)\b/i.test(userAgent);
+}
+
 export function detectRenderMode(userAgent: string | null | undefined): RenderMode {
   if (!userAgent) return "default";
 

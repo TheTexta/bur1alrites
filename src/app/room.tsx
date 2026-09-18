@@ -7,6 +7,10 @@ import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 
 import { attachHlsStream } from "@/lib/hls-stream";
+import {
+  registerSceneVideoTelemetry,
+  type ScenePerformanceSource,
+} from "./scene-quality";
 import { GRAIN_STRENGTH } from "./scene-utils";
 import { CEILING_Y, FLOOR_SIZE, FLOOR_Y, SCREEN_Z, type ScreenLayout } from "./scene-layout";
 
@@ -20,8 +24,7 @@ const WALL_COLOR = 0x141414;
 const SCREEN_LIGHT_INTENSITY = 26;
 // Dark footage still throws some light, so the room never goes fully black.
 const SCREEN_LIGHT_FLOOR = 0.02;
-// Frames between video samples, and the size of the square the frame is downscaled to.
-const SAMPLE_INTERVAL = 4;
+// The video is downscaled before reading pixels back to the CPU for the screen light.
 const SAMPLE_SIZE = 8;
 const LIGHT_EASE = 0.15;
 // Additive highlight boost: scales with color^HIGHLIGHT_POWER, so near-black pixels get
@@ -109,17 +112,23 @@ export function ScreenPanel({
   layout,
   displaced = false,
   displacementProgressRef,
-  playingRef,
+  playing,
   segments = SCREEN_SEGMENTS,
   displacementDirections = 8,
+  lightSampleInterval = 4,
+  preferNativeHls = false,
+  telemetrySource,
 }: {
   manifestUrl: string;
   layout: ScreenLayout;
   displaced?: boolean;
   displacementProgressRef?: React.RefObject<number>;
-  playingRef?: React.RefObject<boolean>;
+  playing?: boolean;
   segments?: number;
   displacementDirections?: number;
+  lightSampleInterval?: number | null;
+  preferNativeHls?: boolean;
+  telemetrySource?: ScenePerformanceSource;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -127,6 +136,7 @@ export function ScreenPanel({
   const lightRef = useRef<THREE.RectAreaLight>(null);
   const samplerRef = useRef<CanvasRenderingContext2D | null>(null);
   const frameRef = useRef(0);
+  const shouldPlayRef = useRef(playing ?? true);
   const pointerActiveRef = useRef(false);
   const pointerNdcRef = useRef(new THREE.Vector2());
   const pendingSplashNdcRef = useRef<THREE.Vector2 | null>(null);
@@ -142,6 +152,14 @@ export function ScreenPanel({
   const interactionPoint = useMemo(() => new THREE.Vector3(), []);
   const pointerUv = useMemo(() => new THREE.Vector2(), []);
   const splashUv = useMemo(() => new THREE.Vector2(), []);
+
+  useEffect(() => {
+    shouldPlayRef.current = playing ?? true;
+    const video = videoRef.current;
+    if (!video) return;
+    if (shouldPlayRef.current) void video.play().catch(() => {});
+    else video.pause();
+  }, [playing]);
 
   useEffect(() => {
     if (!displaced) return;
@@ -183,6 +201,16 @@ export function ScreenPanel({
     // Rect area lights are unlit until their LTC lookup textures are loaded.
     RectAreaLightUniformsLib.init();
 
+    if (lightSampleInterval === null) {
+      samplerRef.current = null;
+      const light = lightRef.current;
+      if (light) {
+        light.color.set(0xffffff);
+        light.intensity = SCREEN_LIGHT_FLOOR * SCREEN_LIGHT_INTENSITY;
+      }
+      return;
+    }
+
     const sampler = document.createElement("canvas");
     sampler.width = SAMPLE_SIZE;
     sampler.height = SAMPLE_SIZE;
@@ -191,7 +219,7 @@ export function ScreenPanel({
     return () => {
       samplerRef.current = null;
     };
-  }, []);
+  }, [lightSampleInterval]);
 
   // Owns the <video>/HLS lifecycle only, so quality changes that only affect the shader
   // (displacementDirections) never tear down and restart the stream.
@@ -203,6 +231,9 @@ export function ScreenPanel({
     video.preload = "auto";
     video.crossOrigin = "anonymous";
     videoRef.current = video;
+    const unregisterTelemetry = telemetrySource
+      ? registerSceneVideoTelemetry(telemetrySource, video)
+      : () => {};
 
     const texture = new THREE.VideoTexture(video);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -211,25 +242,29 @@ export function ScreenPanel({
     let controller: Awaited<ReturnType<typeof attachHlsStream>> | null = null;
     let cancelled = false;
 
-    void attachHlsStream(video, manifestUrl, { startLevel: 0 })
+    void attachHlsStream(video, manifestUrl, {
+      startLevel: 0,
+      preferNative: preferNativeHls,
+    })
       .then((nextController) => {
         if (cancelled) {
           nextController.destroy();
           return;
         }
         controller = nextController;
-        void video.play().catch(() => {});
+        if (shouldPlayRef.current) void video.play().catch(() => {});
       })
       .catch(() => {});
 
     return () => {
       cancelled = true;
+      unregisterTelemetry();
       controller?.destroy();
       texture.dispose();
       textureRef.current = null;
       videoRef.current = null;
     };
-  }, [manifestUrl]);
+  }, [manifestUrl, preferNativeHls, telemetrySource]);
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -405,16 +440,15 @@ export function ScreenPanel({
       }
     }
 
-    // Driven by a ref rather than a prop so scroll-linked pausing never re-renders the scene.
-    const playing = playingRef?.current;
     const element = videoRef.current;
-    if (element && playing !== undefined) {
-      if (playing && element.paused) void element.play().catch(() => {});
-      else if (!playing && !element.paused) element.pause();
+    if (element) {
+      if (shouldPlayRef.current && element.paused) void element.play().catch(() => {});
+      else if (!shouldPlayRef.current && !element.paused) element.pause();
     }
 
+    if (lightSampleInterval === null) return;
     frameRef.current += 1;
-    if (frameRef.current % SAMPLE_INTERVAL !== 0) return;
+    if (frameRef.current % lightSampleInterval !== 0) return;
 
     const video = videoRef.current;
     const light = lightRef.current;
@@ -469,7 +503,12 @@ export function ScreenPanel({
       {/* The screen is the only light source; rotated so the panel emits toward the camera. */}
       <rectAreaLight
         ref={lightRef}
-        args={[0xffffff, 0, layout.width, layout.height]}
+        args={[
+          0xffffff,
+          lightSampleInterval === null ? SCREEN_LIGHT_FLOOR * SCREEN_LIGHT_INTENSITY : 0,
+          layout.width,
+          layout.height,
+        ]}
         rotation={[0, Math.PI, 0]}
       />
     </group>

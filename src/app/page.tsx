@@ -9,13 +9,15 @@ import {
   buildPortfolioStreamManifestPath,
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
-import { detectRenderMode } from "@/lib/browser-render-mode";
+import { detectMobileDevice, detectRenderMode } from "@/lib/browser-render-mode";
 
 import { ContactLinks } from "./contact-links";
 import { HeroScene } from "./hero-scene";
 import { GalleryMediaSlot, type GallerySceneItem } from "./gallery-three";
 import { PageRestoreBoundary } from "./page-restore-boundary";
 import { VideoRoom } from "./video-room";
+import { SceneQualityProvider } from "./scene-quality";
+import { getInitialSceneQualityLevel } from "./scene-quality-controller";
 import { listGalleryItems, type GalleryItem } from "@/lib/gallery";
 
 type MediaItem = GalleryItem;
@@ -51,6 +53,12 @@ export default async function StorageTestPage() {
     listGalleryItems({ publishedOnly: true }).catch(() => null),
   ]);
   const renderMode = detectRenderMode(requestHeaders.get("user-agent"));
+  const initialSceneQuality = getInitialSceneQualityLevel(
+    detectMobileDevice(
+      requestHeaders.get("user-agent"),
+      requestHeaders.get("sec-ch-ua-mobile"),
+    ),
+  );
   const media = galleryItems === null ? MEDIA : galleryItems;
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
@@ -82,51 +90,53 @@ export default async function StorageTestPage() {
   });
 
   return (
-    <PageRestoreBoundary>
-      <section
-        aria-label="Portfolio reel"
-        className="relative z-10 h-svh w-full overflow-hidden isolate"
-      />
+    <SceneQualityProvider initialLevel={initialSceneQuality}>
+      <PageRestoreBoundary>
+        <section
+          aria-label="Portfolio reel"
+          className="relative z-10 h-svh w-full overflow-hidden isolate"
+        />
 
-      <HeroScene
-        manifestUrl={heroManifestUrl}
-        galleryItems={sceneMedia}
-        preferNativeHls={renderMode === "webkit-safe"}
-      />
+        <HeroScene
+          manifestUrl={heroManifestUrl}
+          galleryItems={sceneMedia}
+          preferNativeHls={renderMode === "webkit-safe"}
+        />
 
-      {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
-      <section aria-labelledby="portfolio-heading">
-        <h2 id="portfolio-heading" className="sr-only">
-          Selected work
-        </h2>
-        <div
-          id="portfolio-gallery"
-          className="relative z-10 mx-auto w-[min(86vw,1600px)] columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4"
-        >
-          {sceneMedia.map((item, index) => {
-            return (
-              <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
-                <div className="relative block w-full text-inherit">
-                  <GalleryMediaSlot
-                    item={item}
-                    index={index}
-                    renderMode={renderMode}
-                  />
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+        {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
+        <section aria-labelledby="portfolio-heading">
+          <h2 id="portfolio-heading" className="sr-only">
+            Selected work
+          </h2>
+          <div
+            id="portfolio-gallery"
+            className="relative z-10 mx-auto w-[min(86vw,1600px)] columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4"
+          >
+            {sceneMedia.map((item, index) => {
+              return (
+                <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
+                  <div className="relative block w-full text-inherit">
+                    <GalleryMediaSlot
+                      item={item}
+                      index={index}
+                      renderMode={renderMode}
+                    />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
-      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full">
-        <h2 id="contact-heading" className="sr-only">
-          Contact bur1alrites
-        </h2>
-        <ContactLinks />
-      </section>
+        <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full">
+          <h2 id="contact-heading" className="sr-only">
+            Contact bur1alrites
+          </h2>
+          <ContactLinks />
+        </section>
 
-      <VideoRoom />
-    </PageRestoreBoundary>
+        <VideoRoom preferNativeHls={renderMode === "webkit-safe"} />
+      </PageRestoreBoundary>
+    </SceneQualityProvider>
   );
 }

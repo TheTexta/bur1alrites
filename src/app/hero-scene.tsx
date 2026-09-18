@@ -23,7 +23,7 @@ import {
   screenFitDistance,
 } from "./scene-layout";
 import { useRenderingEnabled, usePointerPosition, useVideoRoomOpen } from "./scene-utils";
-import { recordFrameSample, useSceneQuality } from "./scene-quality";
+import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 
 const WORDMARK = "bur1alrites";
 const WORDMARK_FONT = "/fonts/AIxDB-CUMI.TTF";
@@ -104,9 +104,13 @@ function currentRise(geometryRef: React.RefObject<WordmarkGeometry>) {
 // Feeds the hero Canvas's frame time to the automatic quality controller - this Canvas is the
 // heaviest, most persistent workload on the page (mirror/bloom/displacement render regardless of
 // scroll position), so it's the right signal for both downgrades and upgrades.
-function ScenePerformanceMonitor() {
+function ScenePerformanceMonitor({
+  recordFrameSample,
+}: {
+  recordFrameSample: (deltaMs: number, source: "hero") => void;
+}) {
   useFrame((_, delta) => {
-    recordFrameSample(delta * 1000);
+    recordFrameSample(delta * 1000, "hero");
   });
   return null;
 }
@@ -373,6 +377,7 @@ export function HeroScene({
   const enabled = useRenderingEnabled();
   const roomOpen = useVideoRoomOpen();
   const quality = useSceneQuality();
+  const recordFrameSample = useSceneFrameRecorder();
   const screenLayout = useMemo(() => getHeroScreenLayout(), []);
 
   return (
@@ -396,7 +401,7 @@ export function HeroScene({
             geometryRef={geometryRef}
             displacementProgressRef={displacementProgressRef}
           />
-          <ScenePerformanceMonitor />
+          <ScenePerformanceMonitor recordFrameSample={recordFrameSample} />
           <MirrorFloor resolutionScale={quality.mirrorResolutionScale} />
           <RoomShell />
           <ScreenPanel
@@ -406,6 +411,10 @@ export function HeroScene({
             displacementProgressRef={displacementProgressRef}
             segments={quality.screenSegments}
             displacementDirections={quality.displacementDirections}
+            lightSampleInterval={quality.lightSampleInterval}
+            preferNativeHls={preferNativeHls}
+            telemetrySource="hero"
+            playing={!roomOpen}
           />
           <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
           <Suspense fallback={null}>

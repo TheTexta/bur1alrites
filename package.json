@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "hls:worker": "node media-worker/worker.mjs",
     "hls:worker:once": "node media-worker/worker.mjs --once",
     "admin:hash-password": "node scripts/hash-admin-password.mjs",
@@ -33,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
