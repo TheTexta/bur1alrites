@@ -3,14 +3,22 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useThree } from "@react-three/fiber";
 
+let cachedWebGLAvailability: boolean | undefined;
+
 export function isWebGLAvailable() {
   if (typeof window === "undefined") return false;
+  if (cachedWebGLAvailability !== undefined) return cachedWebGLAvailability;
+
   try {
     const canvas = document.createElement("canvas");
-    return !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+    const context = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    cachedWebGLAvailability = !!context;
+    context?.getExtension("WEBGL_lose_context")?.loseContext();
   } catch {
-    return false;
+    cachedWebGLAvailability = false;
   }
+
+  return cachedWebGLAvailability;
 }
 
 export function prefersReducedMotion() {
@@ -67,4 +75,3 @@ export function usePointerPosition() {
 
   return pointerState;
 }
-

@@ -6,8 +6,9 @@ MOV files in `portfolio-images/` are preserved as archival masters. The site
 only requests HLS manifests and segments:
 
 - The hero starts at the 540p HLS rendition and can adapt to 720p/1080p.
-- Gallery clips load only a poster initially; their HLS player is dynamically
-  imported on hover or touch, then destroyed when the pointer leaves.
+- Gallery clips render as lazily loaded poster planes in the Three.js room. One
+  shared HLS player and video texture attach immediately on hover, then stop and
+  return the card to its poster when the pointer leaves.
 - Source MOVs are never rendered as a browser video URL.
 
 The worker at [media-worker](./media-worker) reconciles the existing bucket

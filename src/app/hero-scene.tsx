@@ -8,6 +8,7 @@ import { EffectPass, type BloomEffect, type EffectComposer as EffectComposerImpl
 import * as THREE from "three";
 
 import { measureSections, observedSections } from "./hero-wordmark-motion";
+import { GalleryInScene, type GallerySceneItem } from "./gallery-three";
 import { MirrorFloor, RoomShell, SCREEN_DISPLACEMENT, ScreenPanel } from "./room";
 import {
   FLOOR_Y,
@@ -48,7 +49,7 @@ const LOGO_HEIGHT = 5 * (1008 / 1070);
 const LOGO_Z = SCREEN_Z + 8;
 const LOGO_Y = FLOOR_Y + LOGO_HEIGHT / 2;
 // Where the camera settles once the contact section is fully in view.
-const CONTACT_EYE_Y = 1.5;
+const CONTACT_EYE_Y = -4.0;
 const DISPLACEMENT_START = 1.0;
 const DISPLACEMENT_FINISH = 4.0;
 const DISPLACEMENT_END_OF_SCROLL = 6.0;
@@ -168,11 +169,24 @@ function HeroRig({
 // Sits on the mirror floor; the camera's end-of-scroll tilt is what brings it into frame.
 function FloorLogo() {
   const logoTexture = useTexture("/assets/logo.png");
+  const material = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        map: logoTexture,
+        color: new THREE.Color(BASE_EMISSIVE, BASE_EMISSIVE, BASE_EMISSIVE),
+        transparent: true,
+        toneMapped: false,
+        fog: false,
+        dithering: true,
+      }),
+    [logoTexture],
+  );
+
+  useEffect(() => () => material.dispose(), [material]);
 
   return (
-    <mesh position={[0, LOGO_Y, LOGO_Z]}>
+    <mesh position={[0, LOGO_Y, LOGO_Z]} material={material}>
       <planeGeometry args={[LOGO_HEIGHT * LOGO_ASPECT, LOGO_HEIGHT]} />
-      <meshBasicMaterial map={logoTexture} transparent toneMapped={false} />
     </mesh>
   );
 }
@@ -237,9 +251,7 @@ function WordmarkGlyphs({ geometryRef }: { geometryRef: React.RefObject<Wordmark
 
     if (group) {
       // r3f's documented pattern: mutate three.js objects in useFrame instead of setState.
-      /* eslint-disable-next-line react-hooks/immutability */
       group.position.y = WORDMARK_Y + WORDMARK_RISE * galleryProgress;
-      /* eslint-disable-next-line react-hooks/immutability */
       group.visible = fade > 0.001;
     }
 
@@ -328,9 +340,15 @@ function StaticWordmark() {
 
 type HeroSceneProps = {
   manifestUrl: string;
+  galleryItems: GallerySceneItem[];
+  preferNativeHls: boolean;
 };
 
-export function HeroScene({ manifestUrl }: HeroSceneProps) {
+export function HeroScene({
+  manifestUrl,
+  galleryItems,
+  preferNativeHls,
+}: HeroSceneProps) {
   const geometryRef = useWordmarkGeometry();
   const displacementProgressRef = useRef(DISPLACEMENT_START);
   const enabled = useRenderingEnabled();
@@ -362,6 +380,7 @@ export function HeroScene({ manifestUrl }: HeroSceneProps) {
             displaced
             displacementProgressRef={displacementProgressRef}
           />
+          <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
           <Suspense fallback={null}>
             <FloorLogo />
           </Suspense>

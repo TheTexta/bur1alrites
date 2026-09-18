@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { headers } from "next/headers";
 
 import {
@@ -11,11 +10,12 @@ import {
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
 import { detectRenderMode } from "@/lib/browser-render-mode";
-import { CONTACT_EMAIL, CONTACT_INSTAGRAM } from "@/lib/contact";
 
+import { ContactLinks } from "./contact-links";
 import { HeroScene } from "./hero-scene";
+import { GalleryMediaSlot, type GallerySceneItem } from "./gallery-three";
+import { PageRestoreBoundary } from "./page-restore-boundary";
 import { VideoRoom } from "./video-room";
-import { VideoThumb } from "./video-thumb";
 import { listGalleryItems, type GalleryItem } from "@/lib/gallery";
 
 type MediaItem = GalleryItem;
@@ -55,15 +55,44 @@ export default async function StorageTestPage() {
   const heroManifestUrl = buildSupabaseStoragePublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );
+  const sceneMedia: GallerySceneItem[] = media.map((item) => {
+    const path = buildPortfolioStoragePath(item.slug, item.extension);
+    const isVideo = item.extension === "mov";
+
+    return {
+      slug: item.slug,
+      previewUrl: isVideo
+        ? buildSupabaseStorageRenderUrl(
+            buildPortfolioVideoPosterPath(item.slug),
+            { width: 960, quality: 75 },
+          )
+        : buildSupabaseStorageRenderUrl(path, { width: 960, quality: 75 }),
+      manifestUrl: isVideo
+        ? buildSupabaseStoragePublicUrl(
+            buildPortfolioStreamManifestPath(item.slug),
+          )
+        : null,
+      width: item.width,
+      height: item.height,
+      title: item.title,
+      client: item.client,
+      type: item.type,
+      year: item.year,
+    };
+  });
 
   return (
-    <main>
+    <PageRestoreBoundary>
       <section
         aria-label="Portfolio reel"
         className="relative z-10 h-svh w-full overflow-hidden isolate"
       />
 
-      <HeroScene manifestUrl={heroManifestUrl} />
+      <HeroScene
+        manifestUrl={heroManifestUrl}
+        galleryItems={sceneMedia}
+        preferNativeHls={renderMode === "webkit-safe"}
+      />
 
       {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
       <section aria-labelledby="portfolio-heading">
@@ -71,64 +100,18 @@ export default async function StorageTestPage() {
           Selected work
         </h2>
         <div
+          id="portfolio-gallery"
           className="relative z-10 mx-auto w-[min(86vw,1600px)] columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4"
         >
-          {media.map((item) => {
-            const path = buildPortfolioStoragePath(item.slug, item.extension);
-            const isVideo = item.extension === "mov";
-            const imageSrc = isVideo
-              ? null
-              : buildSupabaseStorageRenderUrl(path, {
-                  width: 960,
-                  quality: 75,
-                });
-            const manifestUrl = isVideo
-              ? buildSupabaseStoragePublicUrl(
-                  buildPortfolioStreamManifestPath(item.slug),
-                )
-              : null;
-            const posterUrl = isVideo
-              ? buildSupabaseStorageRenderUrl(
-                  buildPortfolioVideoPosterPath(item.slug),
-                  { width: 960, quality: 75 },
-                )
-              : null;
-
+          {sceneMedia.map((item, index) => {
             return (
               <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
                 <div className="relative block w-full text-inherit">
-                  {isVideo ? (
-                    <VideoThumb
-                      manifestUrl={manifestUrl!}
-                      posterUrl={posterUrl!}
-                      width={item.width}
-                      height={item.height}
-                      label={`${item.title}, ${item.client}, ${item.type}, ${item.year}`}
-                      renderMode={renderMode}
-                    />
-                  ) : (
-                    <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">
-                      <Image
-                        src={imageSrc!}
-                        alt={`${item.title}, ${item.client}, ${item.type}, ${item.year}`}
-                        width={item.width}
-                        height={item.height}
-                        quality={75}
-                        sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
-                        unoptimized
-                      />
-                    </span>
-                  )}
-                  <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 px-[5px] pb-[5px] leading-[1.35] text-white mix-blend-difference">
-                    <span className="flex min-w-0 flex-col">
-                      <span className="font-bold">{item.title}</span>
-                      <span>{item.client}</span>
-                    </span>
-                    <span className="flex min-w-0 flex-col items-end text-right">
-                      <span>{item.type}</span>
-                      <span>{item.year}</span>
-                    </span>
-                  </span>
+                  <GalleryMediaSlot
+                    item={item}
+                    index={index}
+                    renderMode={renderMode}
+                  />
                 </div>
               </article>
             );
@@ -136,33 +119,14 @@ export default async function StorageTestPage() {
         </div>
       </section>
 
-      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full pb-[20vh]">
+      <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full">
         <h2 id="contact-heading" className="sr-only">
           Contact bur1alrites
         </h2>
-        {/* Pushed near the bottom of the frame so it clears the statue the camera tilts down onto. */}
-        <ul
-          className="mx-auto m-0 flex w-[min(86vw,1600px)] list-none flex-col items-center gap-2 p-0 pt-[78svh] text-center text-[clamp(14px,1.4vw,20px)] uppercase text-white"
-        >
-          <li>
-            <a className="underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
-              {CONTACT_EMAIL}
-            </a>
-          </li>
-          <li>
-            <a
-              className="underline-offset-4 hover:underline"
-              href={CONTACT_INSTAGRAM}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              @bur1alrites
-            </a>
-          </li>
-        </ul>
+        <ContactLinks />
       </section>
 
       <VideoRoom />
-    </main>
+    </PageRestoreBoundary>
   );
 }

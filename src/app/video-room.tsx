@@ -37,7 +37,7 @@ const MAX_PITCH = 1.4;
 const WALK_EYE_HEIGHT = 5;
 const WALK_SPEED = 16;
 // Keeps the walker from passing through the screen or wandering off the mirror.
-const MIN_SCREEN_DISTANCE = 10;
+const MIN_SCREEN_DISTANCE = 1;
 const MAX_SCREEN_DISTANCE = 72;
 const WALK_BOUND_X = FLOOR_SIZE / 2 - 14;
 const WALK_KEYS: Record<string, "forward" | "back" | "left" | "right"> = {
