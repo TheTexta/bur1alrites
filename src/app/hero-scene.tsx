@@ -15,14 +15,16 @@ import {
   HERO_ASPECT,
   HERO_EYE_Y,
   LOGO_ASPECT,
+  MOBILE_FOV_INCREASE,
   SCREEN_Z,
+  getDisplacementProgress,
   getHeroCameraDistanceScale,
   getHeroScreenLayout,
   getScreenLayout,
   getScrollRise,
   screenFitDistance,
 } from "./scene-layout";
-import { useRenderingEnabled, usePointerPosition, useVideoRoomOpen } from "./scene-utils";
+import { useMobileView, useRenderingEnabled, usePointerPosition, useVideoRoomOpen } from "./scene-utils";
 import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 
 const WORDMARK = "bur1alrites";
@@ -39,6 +41,8 @@ const WORDMARK_SIZE = 1.6;
 const EXTRUDE_LAYERS = 8;
 const EXTRUDE_STEP = 0.015;
 const HERO_FOV = 50;
+const MOBILE_HERO_DISTANCE_SCALE = 0.80;
+const MOBILE_WORDMARK_SCALE = 0.75;
 const PARALLAX_STRENGTH = 2.4;
 const PARALLAX_EASE = 0.06;
 // Vertical drift is damped so the pointer never fights the scroll-driven rise.
@@ -47,13 +51,14 @@ const PARALLAX_VERTICAL = 0.3;
 const WORDMARK_RISE = 20;
 // Preserve the artwork's previous visible size after trimming the source from 1070px to 1008px.
 const LOGO_HEIGHT = 5 * (1008 / 1070);
-const LOGO_Z = SCREEN_Z + 8;
+const STATUE_FORWARD_OFFSET = 2.5;
+const LOGO_Z = SCREEN_Z + 8 + STATUE_FORWARD_OFFSET;
 const LOGO_Y = FLOOR_Y + LOGO_HEIGHT / 2;
 // Where the camera settles once the contact section is fully in view.
 const CONTACT_EYE_Y = -4.0;
 const DISPLACEMENT_START = 1.0;
 const DISPLACEMENT_FINISH = 4.0;
-const DISPLACEMENT_END_OF_SCROLL = 6.0;
+const DISPLACEMENT_END_OF_SCROLL = 10.0;
 
 // troika-three-text extends THREE.Mesh with this reactive glyph property.
 type TroikaTextMesh = THREE.Mesh & {
@@ -86,19 +91,29 @@ function useWordmarkGeometry() {
 }
 
 function currentRise(geometryRef: React.RefObject<WordmarkGeometry>) {
-  const { galleryTop } = geometryRef.current;
   const scrollY = window.scrollY;
   const rise = getScrollRise(scrollY, geometryRef.current, window.innerHeight);
-  const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, galleryTop + 1);
+  const maxScroll = Math.max(
+    document.documentElement.scrollHeight - window.innerHeight,
+    rise.contactTransitionStart + 1,
+  );
   const scrollEndProgress = THREE.MathUtils.clamp(
-    (scrollY - galleryTop) / Math.max(maxScroll - galleryTop, 1),
+    (scrollY - rise.contactTransitionStart) / (maxScroll - rise.contactTransitionStart),
     0,
     1,
   );
+  const displacementProgress = getDisplacementProgress(
+    scrollY,
+    rise.contactTransitionStart,
+    maxScroll,
+    DISPLACEMENT_START,
+    DISPLACEMENT_FINISH,
+    DISPLACEMENT_END_OF_SCROLL,
+  );
   Object.assign(window as unknown as Record<string, unknown>, {
-    __rise: { ...rise, scrollEndProgress, geom: geometryRef.current, scrollY },
+    __rise: { ...rise, scrollEndProgress, displacementProgress, geom: geometryRef.current, scrollY },
   });
-  return { ...rise, scrollEndProgress };
+  return { ...rise, displacementProgress };
 }
 
 // Feeds the hero Canvas's frame time to the automatic quality controller - this Canvas is the
@@ -120,10 +135,12 @@ function HeroRig({
   geometryRef,
   displacementProgressRef,
   pointerParallax,
+  isMobile,
 }: {
   geometryRef: React.RefObject<WordmarkGeometry>;
   displacementProgressRef: React.RefObject<number>;
   pointerParallax: boolean;
+  isMobile: boolean;
 }) {
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
   const size = useThree((state) => state.size);
@@ -138,9 +155,10 @@ function HeroRig({
     const canvasAspect = size.width / Math.max(size.height, 1);
     return (
       screenFitDistance(HERO_FOV, canvasAspect, fitLayout) *
-      getHeroCameraDistanceScale(size.width)
+      getHeroCameraDistanceScale(size.width) *
+      (isMobile ? MOBILE_HERO_DISTANCE_SCALE : 1)
     );
-  }, [fitLayout, size.width, size.height]);
+  }, [fitLayout, isMobile, size.width, size.height]);
 
   useEffect(() => {
     // r3f's documented pattern: mutate the camera in an effect when the viewport changes.
@@ -150,24 +168,14 @@ function HeroRig({
   }, [camera, size]);
 
   useFrame(() => {
-    const { galleryProgress, contactProgress, scrollEndProgress } = currentRise(geometryRef);
-    const galleryDisplacement = THREE.MathUtils.lerp(
-      DISPLACEMENT_START,
-      DISPLACEMENT_FINISH,
-      galleryProgress,
-    );
-    const scrollEndEase = 1 - (1 - scrollEndProgress) ** 3;
-    displacementProgressRef.current = THREE.MathUtils.lerp(
-      galleryDisplacement,
-      DISPLACEMENT_END_OF_SCROLL,
-      scrollEndEase,
-    );
+    const { contactProgress, displacementProgress } = currentRise(geometryRef);
+    displacementProgressRef.current = displacementProgress;
     const eyeY = HERO_EYE_Y + (CONTACT_EYE_Y - HERO_EYE_Y) * contactProgress;
 
     target.set(
       -(pointerParallax ? pointer.x : 0) * PARALLAX_STRENGTH,
       eyeY + (pointerParallax ? pointer.y : 0) * PARALLAX_STRENGTH * PARALLAX_VERTICAL,
-      SCREEN_Z + distance,
+      SCREEN_Z + distance + STATUE_FORWARD_OFFSET * contactProgress,
     );
     // r3f's documented pattern: mutate three.js objects (here, the camera) in useFrame instead of setState.
     camera.position.lerp(target, PARALLAX_EASE);
@@ -211,9 +219,11 @@ function FloorLogo() {
 function WordmarkGlyphs({
   geometryRef,
   wideBloomLevels,
+  mobileView,
 }: {
   geometryRef: React.RefObject<WordmarkGeometry>;
   wideBloomLevels: number | null;
+  mobileView: boolean;
 }) {
   const textRef = useRef<TroikaTextMesh>(null);
   const wordmarkGroupRef = useRef<THREE.Group>(null);
@@ -297,7 +307,11 @@ function WordmarkGlyphs({
 
   return (
     <>
-      <group ref={wordmarkGroupRef} position={[0, WORDMARK_Y, WORDMARK_Z]}>
+      <group
+        ref={wordmarkGroupRef}
+        position={[0, WORDMARK_Y, WORDMARK_Z]}
+        scale={mobileView ? MOBILE_WORDMARK_SCALE : 1}
+      >
         <Text
           ref={textRef}
           font={WORDMARK_FONT}
@@ -355,9 +369,9 @@ function WordmarkGlyphs({
   );
 }
 
-function StaticWordmark() {
+function StaticWordmark({ mobileView }: { mobileView: boolean }) {
   return (
-    <div className="pointer-events-none fixed inset-x-2 top-1/2 z-10 -translate-y-1/2 text-center font-[AIx_Darbotzcumi] text-[clamp(48px,8vw,260px)] leading-[0.85] uppercase text-white mix-blend-difference">
+    <div className={`pointer-events-none fixed inset-x-2 top-1/2 z-10 -translate-y-1/2 text-center font-[AIx_Darbotzcumi] leading-[0.85] uppercase text-white mix-blend-difference ${mobileView ? "text-[clamp(36px,6vw,195px)]" : "text-[clamp(48px,8vw,260px)]"}`}>
       {WORDMARK}
     </div>
   );
@@ -379,6 +393,7 @@ export function HeroScene({
   const geometryRef = useWordmarkGeometry();
   const displacementProgressRef = useRef(DISPLACEMENT_START);
   const enabled = useRenderingEnabled();
+  const mobileView = useMobileView(isMobile);
   const roomOpen = useVideoRoomOpen();
   const quality = useSceneQuality();
   const recordFrameSample = useSceneFrameRecorder();
@@ -396,7 +411,12 @@ export function HeroScene({
           dpr={quality.dpr}
           // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-          camera={{ position: [0, 0, SCREEN_Z + 30], fov: HERO_FOV, near: 0.1, far: 400 }}
+          camera={{
+            position: [0, 0, SCREEN_Z + 30],
+            fov: HERO_FOV + (isMobile ? MOBILE_FOV_INCREASE : 0),
+            near: 0.1,
+            far: 400,
+          }}
           // VideoRoom fully covers this canvas once open, so freeze the last frame instead of burning GPU behind it.
           frameloop={roomOpen ? "never" : "always"}
           aria-hidden="true"
@@ -405,6 +425,7 @@ export function HeroScene({
             geometryRef={geometryRef}
             displacementProgressRef={displacementProgressRef}
             pointerParallax={!isMobile}
+            isMobile={isMobile}
           />
           <ScenePerformanceMonitor recordFrameSample={recordFrameSample} />
           <MirrorFloor resolutionScale={quality.mirrorResolutionScale} />
@@ -421,14 +442,20 @@ export function HeroScene({
             telemetrySource="hero"
             playing={!roomOpen}
           />
-          <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
+          {!mobileView ? (
+            <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
+          ) : null}
           <Suspense fallback={null}>
             <FloorLogo />
           </Suspense>
-          <WordmarkGlyphs geometryRef={geometryRef} wideBloomLevels={quality.wideBloomLevels} />
+          <WordmarkGlyphs
+            geometryRef={geometryRef}
+            wideBloomLevels={quality.wideBloomLevels}
+            mobileView={mobileView}
+          />
         </Canvas>
       ) : (
-        <StaticWordmark />
+        <StaticWordmark mobileView={mobileView} />
       )}
     </>
   );

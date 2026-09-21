@@ -47,6 +47,22 @@ export function useRenderingEnabled() {
   );
 }
 
+const MOBILE_VIEW_QUERY = "(max-width: 767px)";
+
+function subscribeToMobileViewChange(callback: () => void) {
+  const media = window.matchMedia(MOBILE_VIEW_QUERY);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+export function useMobileView(isMobileDevice: boolean) {
+  return useSyncExternalStore(
+    subscribeToMobileViewChange,
+    () => isMobileDevice || window.matchMedia(MOBILE_VIEW_QUERY).matches,
+    () => isMobileDevice,
+  );
+}
+
 export function useReducedMotion() {
   return useSyncExternalStore(subscribeToReducedMotionChange, prefersReducedMotion, getServerRenderCapabilitySnapshot);
 }

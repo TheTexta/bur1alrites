@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* The document remains the scroll container for the homepage's scroll-driven scene. */
+html:has(.homepage-snap) {
+	scroll-snap-type: y proximity;
+}
+
+.homepage-snap > section {
+	scroll-snap-align: start;
+}
+
 /* Tailwind v4 preflight resets buttons to cursor: default. */
 @layer base {
 	button:not(:disabled),

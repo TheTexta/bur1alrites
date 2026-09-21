@@ -234,7 +234,9 @@ export function VideoThumb({
   }
 
   return (
-    <span
+    <button
+      type="button"
+      aria-label={`Open ${label}`}
       data-active={isActive ? "" : undefined}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") activatePreview();
@@ -242,17 +244,11 @@ export function VideoThumb({
       onPointerLeave={(event) => {
         if (event.pointerType === "mouse") deactivatePreview();
       }}
-      onPointerDown={(event) => {
-        if (event.pointerType === "mouse") return;
-
-        if (isActive) deactivatePreview();
-        else activatePreview();
-      }}
       onClick={() => {
         stopPreview();
         openVideoRoom({ manifestUrl, posterUrl, label, width, height });
       }}
-      className={`relative block min-h-[60px] w-full cursor-pointer overflow-hidden ${isWebKitSafe ? "" : `transition-[filter] ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}`}
+      className={`group relative block min-h-[60px] w-full appearance-none overflow-hidden border-0 p-0 text-inherit ${isWebKitSafe ? "" : `transition-[filter] focus-visible:grayscale-0 focus-visible:invert-0 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}`}`}
       style={{ aspectRatio: `${width} / ${height}` }}
     >
       {/* Pointer events stay on the wrapper above, so the hit-test box never moves and
@@ -265,7 +261,7 @@ export function VideoThumb({
           playsInline
           preload="none"
           poster={posterUrl}
-          aria-label={label}
+          aria-hidden="true"
           className="pointer-events-none block h-full w-full object-cover"
           onLoadedData={() => {
             if (isWebKitSafe && activeRef.current) setHasFirstFrame(true);
@@ -280,10 +276,10 @@ export function VideoThumb({
             height={height}
             sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
             unoptimized
-            className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter] duration-150 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"} ${isActive && hasFirstFrame ? "opacity-0 transition-[filter,opacity]" : "opacity-100"}`}
+            className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter] duration-150 group-focus-visible:grayscale-0 group-focus-visible:invert-0 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"} ${isActive && hasFirstFrame ? "opacity-0 transition-[filter,opacity]" : "opacity-100"}`}
           />
         ) : null}
       </span>
-    </span>
+    </button>
   );
 }

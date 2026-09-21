@@ -13,7 +13,8 @@ import { detectMobileDevice, detectRenderMode } from "@/lib/browser-render-mode"
 
 import { ContactLinks } from "./contact-links";
 import { HeroScene } from "./hero-scene";
-import { GalleryMediaSlot, type GallerySceneItem } from "./gallery-three";
+import type { GallerySceneItem } from "./gallery-three";
+import { GalleryGrid } from "./gallery-grid";
 import { PageRestoreBoundary } from "./page-restore-boundary";
 import { VideoRoom } from "./video-room";
 import { SceneQualityProvider } from "./scene-quality";
@@ -108,24 +109,7 @@ export default async function StorageTestPage() {
           <h2 id="portfolio-heading" className="sr-only">
             Selected work
           </h2>
-          <div
-            id="portfolio-gallery"
-            className="relative z-10 mx-auto w-[min(86vw,1600px)] columns-1 gap-0 p-0 min-[768px]:columns-2 min-[992px]:columns-3 min-[1280px]:columns-4"
-          >
-            {sceneMedia.map((item, index) => {
-              return (
-                <article key={item.slug} className="mb-5 break-inside-avoid px-[10px] text-[13px] text-[#e2e1e1]">
-                  <div className="relative block w-full text-inherit">
-                    <GalleryMediaSlot
-                      item={item}
-                      index={index}
-                      renderMode={renderMode}
-                    />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          <GalleryGrid items={sceneMedia} renderMode={renderMode} isMobile={isMobile} />
         </section>
 
         <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full">

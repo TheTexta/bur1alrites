@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -9,7 +9,6 @@ import type { RenderMode } from "@/lib/browser-render-mode";
 import { attachHlsStream, type HlsStreamController } from "@/lib/hls-stream";
 import { openVideoRoom } from "./video-room";
 import { HERO_EYE_Y, SCREEN_Z } from "./scene-layout";
-import { useRenderingEnabled } from "./scene-utils";
 import { VideoThumb } from "./video-thumb";
 
 const GALLERY_HOVER_EVENT = "portfolio:gallery-hover";
@@ -74,16 +73,18 @@ export function GalleryMediaSlot({
   item,
   index,
   renderMode,
+  renderInHtml,
 }: {
   item: GallerySceneItem;
   index: number;
   renderMode: RenderMode;
+  renderInHtml: boolean;
 }) {
-  const enabled = useRenderingEnabled();
+  const [revealed, setRevealed] = useState(false);
   const label = `${item.title}, ${item.client}, ${item.type}, ${item.year}`;
   const style = { aspectRatio: `${item.width} / ${item.height}` };
 
-  if (!enabled) {
+  if (renderInHtml) {
     return (
       <>
         {item.manifestUrl ? (
@@ -96,17 +97,23 @@ export function GalleryMediaSlot({
             renderMode={renderMode}
           />
         ) : (
-          <span className="relative block min-h-[60px] w-full overflow-hidden bg-[#050505] grayscale invert transition-[filter] hover:grayscale-0 hover:invert-0 focus-within:grayscale-0 focus-within:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full">
+          <button
+            type="button"
+            aria-label={`Toggle color for ${label}`}
+            aria-pressed={revealed}
+            onClick={() => setRevealed((current) => !current)}
+            className={`relative block min-h-[60px] w-full appearance-none overflow-hidden border-0 bg-[#050505] p-0 text-inherit transition-[filter] hover:grayscale-0 hover:invert-0 focus-visible:grayscale-0 focus-visible:invert-0 [&_img]:block [&_img]:h-auto [&_img]:w-full ${revealed ? "grayscale-0 invert-0" : "grayscale invert"}`}
+          >
             <Image
               src={item.previewUrl}
-              alt={label}
+              alt=""
               width={item.width}
               height={item.height}
               quality={75}
               sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
               unoptimized
             />
-          </span>
+          </button>
         )}
         <GalleryMetadata item={item} />
       </>

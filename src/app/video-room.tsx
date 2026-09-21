@@ -9,7 +9,14 @@ import * as THREE from "three";
 import { setVideoRoomOpen, usePointerPosition, useRenderingEnabled } from "./scene-utils";
 import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
-import { FLOOR_SIZE, FLOOR_Y, SCREEN_Z, getScreenLayout, type ScreenLayout } from "./scene-layout";
+import {
+  FLOOR_SIZE,
+  FLOOR_Y,
+  MOBILE_FOV_INCREASE,
+  SCREEN_Z,
+  getScreenLayout,
+  type ScreenLayout,
+} from "./scene-layout";
 
 export const OPEN_ROOM_EVENT = "portfolio:open-room";
 
@@ -28,6 +35,7 @@ export function openVideoRoom(detail: RoomVideo) {
 // Headroom left around the screen so pointer drift never pushes an edge out of frame.
 const FIT_MARGIN = 1.2;
 const CAMERA_Z = 6;
+const ROOM_FOV = 38;
 const PARALLAX_STRENGTH = 2.4;
 const PARALLAX_EASE = 0.06;
 // Duration of the fade-to-black crossfade when opening/closing the room, in ms - must match the
@@ -384,7 +392,12 @@ export function VideoRoom({
           dpr={quality.dpr}
           // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
           gl={{ antialias: true, powerPreference: "high-performance" }}
-          camera={{ position: [0, 0, CAMERA_Z], fov: 38, near: 0.1, far: 200 }}
+          camera={{
+            position: [0, 0, CAMERA_Z],
+            fov: ROOM_FOV + (isMobile ? MOBILE_FOV_INCREASE : 0),
+            near: 0.1,
+            far: 200,
+          }}
           aria-hidden="true"
         >
           <RoomScene
@@ -414,7 +427,7 @@ export function VideoRoom({
         ref={closeRef}
         type="button"
         onClick={close}
-        className={`absolute selection:border-white right-5 top-5 z-10 border border-white/30 px-4 py-2 text-[13px] uppercase tracking-wide text-white transition-[colors,opacity] duration-300 hover:bg-white hover:text-black ${walking ? "pointer-events-none opacity-0" : "opacity-100"}`}
+        className={`absolute right-5 top-5 z-10 rounded-none border-0 bg-transparent px-4 py-2 text-[13px] uppercase tracking-wide text-white underline-offset-4 transition-opacity duration-300 hover:underline focus:outline-none focus-visible:underline ${walking ? "pointer-events-none opacity-0" : "opacity-100"}`}
       >
         Close
       </button>

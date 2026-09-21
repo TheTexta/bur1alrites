@@ -27,7 +27,7 @@ export function ContactLinks() {
       );
       const distance = Math.max(window.innerHeight * FADE_DISTANCE, 1);
       const progress = clamp01(1 - (scrollEnd - window.scrollY) / distance);
-      const eased = progress * progress * (3 - 2 * progress);
+      const eased = progress * progress;
 
       list.style.opacity = String(eased);
       list.style.visibility = progress > 0 ? "visible" : "hidden";
@@ -59,6 +59,11 @@ export function ContactLinks() {
       className="invisible absolute inset-x-0 top-[clamp(72px,13svh,140px)] mx-auto m-0 flex w-[min(86vw,1600px)] list-none flex-col items-center gap-2 p-0 text-center text-[clamp(14px,1.4vw,20px)] uppercase text-white opacity-0 will-change-[opacity]"
     >
       <li>
+        <a className="underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+          {CONTACT_EMAIL}
+        </a>
+      </li>
+      <li>
         <a
           className="underline-offset-4 hover:underline"
           href={CONTACT_INSTAGRAM}
@@ -66,11 +71,6 @@ export function ContactLinks() {
           rel="noreferrer noopener"
         >
           @bur1alrites
-        </a>
-      </li>
-      <li>
-        <a className="underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
-          {CONTACT_EMAIL}
         </a>
       </li>
     </ul>

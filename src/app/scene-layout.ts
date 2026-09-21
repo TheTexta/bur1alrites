@@ -14,6 +14,7 @@ const FIT_MARGIN = 1.2;
 
 export const LOGO_ASPECT = 704 / 1008;
 export const HERO_ASPECT = 16 / 9;
+export const MOBILE_FOV_INCREASE = 10;
 
 export type ScreenLayout = { width: number; height: number; centerY: number };
 
@@ -81,6 +82,26 @@ export function getScrollRise(
 
   return {
     galleryProgress: clamp01(scrollY / crossing),
+    contactTransitionStart: revealStart,
     contactProgress: clamp01((scrollY - revealStart) / Math.max(revealEnd - revealStart, 1)),
   };
+}
+
+export function getDisplacementProgress(
+  scrollY: number,
+  contactTransitionStart: number,
+  scrollEnd: number,
+  start: number,
+  finish: number,
+  endOfScroll: number,
+) {
+  // The first phase ends when the camera begins its contact reveal.
+  const toContact = clamp01(scrollY / Math.max(contactTransitionStart, 1));
+  // The second phase reaches its final value at the document's last scroll position.
+  const afterContact = clamp01(
+    (scrollY - contactTransitionStart) / Math.max(scrollEnd - contactTransitionStart, 1),
+  );
+  const easedAfterContact = 1 - (1 - afterContact) ** 3;
+  const beforeContactValue = start + (finish - start) * toContact;
+  return beforeContactValue + (endOfScroll - beforeContactValue) * easedAfterContact;
 }
