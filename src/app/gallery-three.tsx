@@ -74,11 +74,13 @@ export function GalleryMediaSlot({
   index,
   renderMode,
   renderInHtml,
+  playInFrameOnTap,
 }: {
   item: GallerySceneItem;
   index: number;
   renderMode: RenderMode;
   renderInHtml: boolean;
+  playInFrameOnTap: boolean;
 }) {
   const [revealed, setRevealed] = useState(false);
   const label = `${item.title}, ${item.client}, ${item.type}, ${item.year}`;
@@ -95,6 +97,7 @@ export function GalleryMediaSlot({
             height={item.height}
             label={label}
             renderMode={renderMode}
+            playInFrameOnTap={playInFrameOnTap}
           />
         ) : (
           <button

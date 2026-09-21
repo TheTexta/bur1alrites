@@ -19,6 +19,7 @@ type VideoThumbProps = {
   height: number;
   label: string;
   renderMode: RenderMode;
+  playInFrameOnTap: boolean;
 };
 
 export function VideoThumb({
@@ -28,6 +29,7 @@ export function VideoThumb({
   height,
   label,
   renderMode,
+  playInFrameOnTap,
 }: VideoThumbProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const activeRef = useRef(false);
@@ -236,7 +238,12 @@ export function VideoThumb({
   return (
     <button
       type="button"
-      aria-label={`Open ${label}`}
+      aria-label={
+        playInFrameOnTap
+          ? `${isActive ? "Pause" : "Play"} ${label}`
+          : `Open ${label}`
+      }
+      aria-pressed={playInFrameOnTap ? isActive : undefined}
       data-active={isActive ? "" : undefined}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") activatePreview();
@@ -245,6 +252,12 @@ export function VideoThumb({
         if (event.pointerType === "mouse") deactivatePreview();
       }}
       onClick={() => {
+        if (playInFrameOnTap) {
+          if (isActive) deactivatePreview();
+          else activatePreview();
+          return;
+        }
+
         stopPreview();
         openVideoRoom({ manifestUrl, posterUrl, label, width, height });
       }}

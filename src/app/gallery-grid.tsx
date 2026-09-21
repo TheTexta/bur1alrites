@@ -33,6 +33,7 @@ export function GalleryGrid({
               index={index}
               renderMode={renderMode}
               renderInHtml={renderInHtml}
+              playInFrameOnTap={mobileGallery}
             />
           </div>
         </article>
