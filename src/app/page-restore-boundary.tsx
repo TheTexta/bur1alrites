@@ -17,5 +17,5 @@ export function PageRestoreBoundary({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
 
-  return <main key={restoreKey} className="homepage-snap">{children}</main>;
+  return <main key={restoreKey}>{children}</main>;
 }
