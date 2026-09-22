@@ -105,14 +105,21 @@ export default async function StorageTestPage() {
         />
 
         {/* The hero is one viewport tall, so the grid enters as soon as the viewer starts scrolling. */}
-        <section aria-labelledby="portfolio-heading">
+        <section
+          aria-labelledby="portfolio-heading"
+          className="pb-[25svh] min-[768px]:pb-0"
+        >
           <h2 id="portfolio-heading" className="sr-only">
             Selected work
           </h2>
           <GalleryGrid items={sceneMedia} renderMode={renderMode} isMobile={isMobile} />
         </section>
 
-        <section id="contact" aria-labelledby="contact-heading" className="relative z-10 min-h-svh w-full">
+        <section
+          id="contact"
+          aria-labelledby="contact-heading"
+          className="relative z-10 min-h-dvh w-full min-[768px]:min-h-svh"
+        >
           <h2 id="contact-heading" className="sr-only">
             Contact bur1alrites
           </h2>
