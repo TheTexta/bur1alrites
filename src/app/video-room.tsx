@@ -6,7 +6,12 @@ import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { EffectPass, type EffectComposer as EffectComposerImpl } from "postprocessing";
 import * as THREE from "three";
 
-import { setVideoRoomOpen, usePointerPosition, useRenderingEnabled } from "./scene-utils";
+import {
+  setVideoRoomOpen,
+  useMobileView,
+  usePointerPosition,
+  useRenderingEnabled,
+} from "./scene-utils";
 import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
 import {
@@ -312,6 +317,7 @@ export function VideoRoom({
   const [visible, setVisible] = useState(false);
   const [walking, setWalking] = useState(false);
   const enabled = useRenderingEnabled();
+  const mobileView = useMobileView(isMobile);
   const quality = useSceneQuality();
   const recordFrameSample = useSceneFrameRecorder();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -384,17 +390,21 @@ export function VideoRoom({
       role="dialog"
       aria-modal="true"
       aria-label={video.label}
-      className={`fixed inset-0 z-50 bg-black transition-opacity duration-500 ease-in-out ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`video-room-viewport fixed inset-0 z-50 bg-black transition-opacity duration-500 ease-in-out ${visible ? "opacity-100" : "opacity-0"}`}
     >
       {enabled ? (
         <Canvas
           style={{ position: "absolute", inset: 0, cursor: walking ? "none" : "pointer" }}
           dpr={quality.dpr}
-          // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
-          gl={{ antialias: true, powerPreference: "high-performance" }}
+          // MSAA and precision are fixed at context creation; mobile gets the cheaper context.
+          gl={{
+            antialias: !mobileView,
+            powerPreference: "high-performance",
+            precision: mobileView ? "mediump" : "highp",
+          }}
           camera={{
             position: [0, 0, CAMERA_Z],
-            fov: ROOM_FOV + (isMobile ? MOBILE_FOV_INCREASE : 0),
+            fov: ROOM_FOV + (mobileView ? MOBILE_FOV_INCREASE : 0),
             near: 0.1,
             far: 200,
           }}
@@ -407,7 +417,7 @@ export function VideoRoom({
             lightSampleInterval={quality.lightSampleInterval}
             preferNativeHls={preferNativeHls}
             recordFrameSample={recordFrameSample}
-            isMobile={isMobile}
+            isMobile={mobileView}
           />
         </Canvas>
       ) : (
@@ -438,7 +448,7 @@ export function VideoRoom({
         {video.label}
       </p>
 
-      {enabled && !isMobile ? (
+      {enabled && !mobileView ? (
         <p
           className={`pointer-events-none absolute inset-x-0 top-6 z-10 text-center text-[11px] uppercase tracking-wide text-white/40 transition-opacity duration-300 ${walking ? "opacity-0" : "opacity-100"}`}
         >

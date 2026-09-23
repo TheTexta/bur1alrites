@@ -7,7 +7,11 @@ import {
   recordSceneFrame,
   resetSceneQualitySampling,
 } from "./scene-quality-controller";
-import { SCENE_QUALITY_LEVELS, SCENE_QUALITY_PRESETS } from "./scene-quality";
+import {
+  MAX_SCENE_DPR,
+  SCENE_QUALITY_LEVELS,
+  SCENE_QUALITY_PRESETS,
+} from "./scene-quality";
 
 function sampleRange(
   level: Parameters<typeof createSceneQualityController>[0],
@@ -85,6 +89,12 @@ describe("scene quality controller", () => {
       expect(cheaper.lightSampleInterval ?? Number.POSITIVE_INFINITY).toBeGreaterThanOrEqual(
         better.lightSampleInterval ?? Number.POSITIVE_INFINITY,
       );
+    }
+  });
+
+  test("caps every adaptive quality preset at a mobile-safe pixel ratio", () => {
+    for (const preset of Object.values(SCENE_QUALITY_PRESETS)) {
+      expect(preset.dpr[1]).toBeLessThanOrEqual(MAX_SCENE_DPR);
     }
   });
 });

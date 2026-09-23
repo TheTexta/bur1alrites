@@ -33,9 +33,14 @@ export type SceneQualitySettings = {
   lightSampleInterval: number | null;
 };
 
+// R3F clamps the actual devicePixelRatio to this tuple's upper bound before
+// calling WebGLRenderer.setPixelRatio. Never render the scene at an uncapped
+// Retina density on mobile hardware.
+export const MAX_SCENE_DPR = 2;
+
 export const SCENE_QUALITY_PRESETS: Record<SceneQualityLevel, SceneQualitySettings> = {
   "very-high": {
-    dpr: [1, 2],
+    dpr: [1, MAX_SCENE_DPR],
     mirrorResolutionScale: 1,
     screenSegments: 180,
     displacementDirections: 8,

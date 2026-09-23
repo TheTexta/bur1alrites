@@ -2,6 +2,29 @@
 
 /* Tailwind v4 preflight resets buttons to cursor: default. */
 @layer base {
+	html,
+	body {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+	}
+
+	html {
+		background: #000;
+		overflow-x: hidden;
+	}
+
+	body {
+		overflow-x: hidden;
+	}
+
+	canvas {
+		display: block;
+		width: 100% !important;
+		height: 100% !important;
+	}
+
 	button:not(:disabled),
 	[role="button"]:not(:disabled),
 	label[for],
@@ -20,6 +43,41 @@
 	[type="reset"]:disabled,
 	select:disabled {
 		cursor: not-allowed;
+	}
+}
+
+/*
+ * Keep WebGL surfaces on a stable box while mobile browser chrome expands and
+ * collapses. The page itself must remain scrollable because scroll drives the
+ * gallery and camera motion, so the fixed/overflow lock belongs here rather
+ * than on <body>.
+ */
+.webgl-viewport,
+.video-room-viewport {
+	width: 100%;
+	height: 100dvh !important;
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+
+.webgl-viewport {
+	position: fixed !important;
+	inset: 0;
+	contain: layout size paint;
+}
+
+@media (max-width: 767px) {
+	html,
+	body {
+		overflow-x: hidden;
+		overscroll-behavior: none;
+	}
+
+	/* lvh stays constant when the address bar changes size, avoiding a WebGL resize storm. */
+	.webgl-viewport,
+	.video-room-viewport {
+		height: 100lvh !important;
+		max-height: 100lvh;
 	}
 }
 

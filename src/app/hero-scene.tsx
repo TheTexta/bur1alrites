@@ -406,14 +406,18 @@ export function HeroScene({
 
       {enabled ? (
         <Canvas
-          className="pointer-events-none z-10"
-          style={{ position: "fixed", inset: 0 }}
+          className="webgl-viewport pointer-events-none z-10"
           dpr={quality.dpr}
-          // MSAA is fixed at WebGL context creation, so this stays constant rather than tracking quality.
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          // MSAA and precision are fixed at context creation; mobile gets the cheaper context.
+          gl={{
+            antialias: !mobileView,
+            alpha: true,
+            powerPreference: "high-performance",
+            precision: mobileView ? "mediump" : "highp",
+          }}
           camera={{
             position: [0, 0, SCREEN_Z + 30],
-            fov: HERO_FOV + (isMobile ? MOBILE_FOV_INCREASE : 0),
+            fov: HERO_FOV + (mobileView ? MOBILE_FOV_INCREASE : 0),
             near: 0.1,
             far: 400,
           }}
@@ -424,8 +428,8 @@ export function HeroScene({
           <HeroRig
             geometryRef={geometryRef}
             displacementProgressRef={displacementProgressRef}
-            pointerParallax={!isMobile}
-            isMobile={isMobile}
+            pointerParallax={!mobileView}
+            isMobile={mobileView}
           />
           <ScenePerformanceMonitor recordFrameSample={recordFrameSample} />
           <MirrorFloor resolutionScale={quality.mirrorResolutionScale} />
