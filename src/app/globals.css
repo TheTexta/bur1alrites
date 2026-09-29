@@ -49,6 +49,13 @@
 	}
 }
 
+@media (min-width: 768px) {
+	html {
+		/* Keep the viewport as the page scroller on desktop browsers. */
+		overflow-x: clip;
+	}
+}
+
 /*
  * Keep WebGL surfaces on a stable box while mobile browser chrome expands and
  * collapses. The page itself must remain scrollable because scroll drives the
@@ -67,6 +74,13 @@
 	position: fixed !important;
 	inset: 0;
 	contain: layout size paint;
+}
+
+@media (min-width: 768px) {
+	.webgl-viewport {
+		/* Let wheel input over the fixed canvas reach the document scroller. */
+		overscroll-behavior-y: auto;
+	}
 }
 
 @media (max-width: 767px) {
