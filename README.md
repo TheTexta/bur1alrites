@@ -46,11 +46,13 @@ that user portfolio access with `npm run admin:access -- <email> grant`. This
 sets `app_metadata.bur1alrites_admin` on the Auth user. Other Supabase users
 cannot access the editor API. To remove access, use `revoke` instead of `grant`.
 
-The browser uploads MOV and MP4 videos directly to Supabase Storage using a
-signed resumable upload. After transfer, the site server moves the file into
-the portfolio path and queues the gallery record for the media worker. Source
-videos must fit the bucket's 100 MB limit. The service-role key stays on the
-server.
+The browser uploads MOV and MP4 videos up to 5 GiB directly to Supabase Storage
+using the admin's Supabase Auth session and a resumable upload. After transfer,
+the site server moves the file into the portfolio path and queues the gallery
+record for the media worker. The Storage service's global limit and the
+`bur1alrites` bucket limit must both be at least 5 GiB. The worker streams the
+source to temporary disk and needs enough free space for the source and HLS
+outputs. The service-role key stays on the server.
 
 For a one-off backfill, run:
 

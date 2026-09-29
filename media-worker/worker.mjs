@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, rm, statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative } from "node:path";
 import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -167,7 +170,7 @@ async function removeAbandonedUploads() {
   console.log(`Removed ${oldUploads.length} abandoned upload${oldUploads.length === 1 ? "" : "s"}.`);
 }
 
-async function readObject(objectPath) {
+async function downloadObject(objectPath, destinationPath) {
   const response = await fetch(objectPathUrl(objectPath), {
     headers: authHeaders(),
   });
@@ -176,7 +179,8 @@ async function readObject(objectPath) {
     throw new Error(`Could not read ${objectPath}: ${await responseText(response)}`);
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  if (!response.body) throw new Error(`Could not stream ${objectPath}: empty response body.`);
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(destinationPath));
 }
 
 async function readObjectIfPresent(objectPath) {
@@ -537,11 +541,20 @@ async function processSource(source) {
 
   console.log(`start ${source.name} (${version})`);
   await updateCatalogStatus(slug, "processing");
+  const sourceBytes = Number(source.metadata?.size ?? 0);
+  if (sourceBytes > 0) {
+    const { bavail, bsize } = await statfs(tmpdir());
+    const freeBytes = bavail * bsize;
+    const requiredBytes = sourceBytes + 2 * 1024 * 1024 * 1024;
+    if (freeBytes < requiredBytes) {
+      throw new Error(`Insufficient temporary disk for ${source.name}: ${Math.ceil(freeBytes / 1024 ** 3)} GiB free, ${Math.ceil(requiredBytes / 1024 ** 3)} GiB needed.`);
+    }
+  }
   const workDirectory = await mkdtemp(join(tmpdir(), "bur1alrites-hls-"));
 
   try {
     const sourcePath = join(workDirectory, `source${extname(source.name).toLowerCase()}`);
-    await writeFile(sourcePath, await readObject(source.name));
+    await downloadObject(source.name, sourcePath);
 
     const video = await inspectVideo(sourcePath);
     const variants = buildVariants(video);

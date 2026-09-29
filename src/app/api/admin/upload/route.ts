@@ -7,7 +7,7 @@ import { buildPortfolioStoragePath, portfolioImageBasePath } from "@/lib/portfol
 import { getSupabaseAdminClient, requirePortfolioAdmin } from "@/lib/supabase/admin";
 import { getPortfolioStorageBucket, getSupabaseUrl } from "@/lib/supabase/config";
 
-const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 5 * 1024 * 1024 * 1024;
 const UPLOAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(mov|mp4)$/;
 const SOURCE_CONTENT_TYPES = { mov: "video/quicktime", mp4: "video/mp4" } as const;
 type SourceExtension = keyof typeof SOURCE_CONTENT_TYPES;
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const fileSize = Number(values?.fileSize);
   if (!metadata ||
       !Number.isSafeInteger(fileSize) || fileSize <= 0 || fileSize > MAX_SOURCE_BYTES) {
-    return NextResponse.json({ error: "Choose a MOV or MP4 video under 100 MB and fill in every field." }, { status: 400 });
+    return NextResponse.json({ error: "Choose a MOV or MP4 video up to 5 GiB and fill in every field." }, { status: 400 });
   }
 
   try {
@@ -69,12 +69,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A clip with that slug already exists." }, { status: 409 });
     }
     const uploadPath = `${basePath()}/incoming/${randomUUID()}.${metadata.extension}`;
-    const bucket = getSupabaseAdminClient().storage.from(getPortfolioStorageBucket());
-    const { data, error } = await bucket.createSignedUploadUrl(uploadPath);
-    if (error || !data) throw error ?? new Error("Could not sign upload.");
     return NextResponse.json({
       uploadPath,
-      token: data.token,
       endpoint: `${getSupabaseUrl()}/storage/v1/upload/resumable`,
       bucket: getPortfolioStorageBucket(),
       contentType: SOURCE_CONTENT_TYPES[metadata.extension],

@@ -11,7 +11,7 @@ import { AdminSessionExpiredError, requestAdminJson } from "./admin-api";
 
 type VideoMetadata = { width: number; height: number; name: string };
 type UploadState = "idle" | "reading" | "uploading" | "success" | "error";
-type SignedUpload = { uploadPath: string; token: string; endpoint: string; bucket: string; contentType: string };
+type PreparedUpload = { uploadPath: string; endpoint: string; bucket: string; contentType: string };
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -89,7 +89,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
     setMessage("Preparing upload...");
 
     try {
-      const signed = await requestAdminJson<SignedUpload>("/api/admin/upload", {
+      const prepared = await requestAdminJson<PreparedUpload>("/api/admin/upload", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...details, fileName: file.name, fileSize: file.size }),
@@ -98,19 +98,20 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
       if (!session) throw new AdminSessionExpiredError("Your session ended.");
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
-          endpoint: signed.endpoint,
+          endpoint: prepared.endpoint,
           chunkSize: 6 * 1024 * 1024,
           retryDelays: [0, 3000, 5000, 10000, 20000],
           uploadDataDuringCreation: true,
           removeFingerprintOnSuccess: true,
-          headers: {
-            "x-signature": signed.token,
-            authorization: `Bearer ${session.access_token}`,
+          onBeforeRequest: async (request) => {
+            const { data: { session: currentSession } } = await getSupabaseBrowserClient().auth.getSession();
+            if (!currentSession) throw new AdminSessionExpiredError("Your session ended.");
+            request.setHeader("authorization", `Bearer ${currentSession.access_token}`);
           },
           metadata: {
-            bucketName: signed.bucket,
-            objectName: signed.uploadPath,
-            contentType: signed.contentType,
+            bucketName: prepared.bucket,
+            objectName: prepared.uploadPath,
+            contentType: prepared.contentType,
             cacheControl: "31536000",
           },
           onProgress: (uploaded, total) => setMessage(`Uploading source clip... ${total ? Math.round(uploaded / total * 100) : 0}%`),
@@ -123,7 +124,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
       await requestAdminJson<{ item: unknown }>("/api/admin/upload", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...details, uploadPath: signed.uploadPath }),
+        body: JSON.stringify({ ...details, uploadPath: prepared.uploadPath }),
       });
       form.reset();
       setMetadata(null);
@@ -131,6 +132,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
       setMessage("Clip queued for processing.");
     } catch (error) {
       if (error instanceof AdminSessionExpiredError ||
+          (error instanceof tus.DetailedError && error.causingError instanceof AdminSessionExpiredError) ||
           (error instanceof tus.DetailedError && error.originalResponse?.getStatus() === 401)) {
         router.replace("/admin?expired=1&next=/admin/dashboard");
         return;
@@ -171,7 +173,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
           <label htmlFor="clip-file" className="flex min-h-52 cursor-pointer flex-col items-center justify-center border border-dashed border-black px-5 text-center hover:bg-white focus-within:bg-white">
             <Film aria-hidden="true" size={30} strokeWidth={1.4} />
             <span className="mt-4 text-sm font-bold">Choose video</span>
-            <span className="mt-2 max-w-xs break-all text-xs text-black/60">{metadata?.name ?? "MOV or MP4 video"}</span>
+            <span className="mt-2 max-w-xs break-all text-xs text-black/60">{metadata?.name ?? "MOV or MP4 video, up to 5 GiB"}</span>
             <input id="clip-file" required name="file" type="file" accept="video/quicktime,video/mp4,.mov,.mp4" onChange={readVideoMetadata} className="sr-only" />
           </label>
           <div className="mt-4 flex min-h-11 items-center justify-between border-y border-black py-3 text-sm">
