@@ -372,13 +372,16 @@ export function VideoRoom({
       // While the cursor is captured, Escape releases it instead of closing the room.
       if (event.key === "Escape" && !document.pointerLockElement) close();
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const root = document.documentElement;
+    const previousOverflow = root.style.overflow;
+    const previousScrollY = window.scrollY;
+    root.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
     closeRef.current?.focus();
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      root.style.overflow = previousOverflow;
+      window.scrollTo(0, previousScrollY);
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [video, close]);
