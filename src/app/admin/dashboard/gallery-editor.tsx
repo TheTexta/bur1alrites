@@ -201,6 +201,9 @@ export function GalleryEditor() {
             </div>
             <p className="text-sm tabular-nums">{items.length} clips</p>
           </div>
+          {hasUnsavedChanges ? (
+            <p className="pt-4 text-sm" role="status">Save all edits before reordering clips.</p>
+          ) : null}
           {loading ? <p className="py-10 text-sm" aria-live="polite">Loading gallery...</p> : null}
           {loadError ? <p className="py-10 text-sm text-red-700" role="alert">{loadError}</p> : null}
           {!loading && !loadError && items.length === 0 ? <p className="py-10 text-sm">No gallery clips yet.</p> : null}

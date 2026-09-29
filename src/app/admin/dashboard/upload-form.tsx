@@ -3,11 +3,15 @@
 import { CheckCircle2, Film, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
+import * as tus from "tus-js-client";
+
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 import { AdminSessionExpiredError, requestAdminJson } from "./admin-api";
 
 type VideoMetadata = { width: number; height: number; name: string };
 type UploadState = "idle" | "reading" | "uploading" | "success" | "error";
+type SignedUpload = { uploadPath: string; token: string; endpoint: string; bucket: string };
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -62,7 +66,9 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!metadata) {
+    const fileInput = event.currentTarget.elements.namedItem("file");
+    const file = fileInput instanceof HTMLInputElement ? fileInput.files?.[0] : undefined;
+    if (!metadata || !file || file.name !== metadata.name) {
       setState("error");
       setMessage("Choose a video whose dimensions can be read.");
       return;
@@ -70,24 +76,71 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    formData.set("width", String(metadata.width));
-    formData.set("height", String(metadata.height));
+    const details = {
+      slug: String(formData.get("slug") ?? ""),
+      title: String(formData.get("title") ?? ""),
+      client: String(formData.get("client") ?? ""),
+      type: String(formData.get("type") ?? ""),
+      year: String(formData.get("year") ?? ""),
+      width: metadata.width,
+      height: metadata.height,
+    };
     setState("uploading");
-    setMessage("Uploading source clip...");
+    setMessage("Preparing upload...");
 
     try {
-      await requestAdminJson<{ item: unknown }>("/api/admin/upload", { method: "POST", body: formData });
+      const signed = await requestAdminJson<SignedUpload>("/api/admin/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...details, fileName: file.name, fileSize: file.size }),
+      });
+      const { data: { session } } = await getSupabaseBrowserClient().auth.getSession();
+      if (!session) throw new AdminSessionExpiredError("Your session ended.");
+      await new Promise<void>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: signed.endpoint,
+          chunkSize: 6 * 1024 * 1024,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          headers: {
+            "x-signature": signed.token,
+            authorization: `Bearer ${session.access_token}`,
+          },
+          metadata: {
+            bucketName: signed.bucket,
+            objectName: signed.uploadPath,
+            contentType: "video/quicktime",
+            cacheControl: "31536000",
+          },
+          onProgress: (uploaded, total) => setMessage(`Uploading source clip... ${total ? Math.round(uploaded / total * 100) : 0}%`),
+          onError: reject,
+          onSuccess: () => resolve(),
+        });
+        upload.start();
+      });
+      setMessage("Adding clip to gallery...");
+      await requestAdminJson<{ item: unknown }>("/api/admin/upload", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...details, uploadPath: signed.uploadPath }),
+      });
       form.reset();
       setMetadata(null);
       setState("success");
       setMessage("Clip queued for processing.");
     } catch (error) {
-      if (error instanceof AdminSessionExpiredError) {
+      if (error instanceof AdminSessionExpiredError ||
+          (error instanceof tus.DetailedError && error.originalResponse?.getStatus() === 401)) {
         router.replace("/admin?expired=1&next=/admin/dashboard");
         return;
       }
       setState("error");
-      setMessage(error instanceof Error ? error.message : "Upload failed.");
+      if (error instanceof tus.DetailedError && error.originalResponse?.getStatus() === 403) {
+        setMessage("Storage denied this upload. Ask the site administrator to check the portfolio upload policy.");
+      } else {
+        setMessage(error instanceof Error ? error.message : "Upload failed.");
+      }
       return;
     }
 

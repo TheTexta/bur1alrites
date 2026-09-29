@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { isValidAdminSession } from "@/lib/admin-auth";
-import { ADMIN_SESSION_COOKIE } from "@/lib/admin-session";
 import { GalleryRequestError, moveGalleryItem } from "@/lib/gallery";
+import { requirePortfolioAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
@@ -10,11 +9,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
-  const cookie = request.headers.get("cookie") ?? "";
-  const session = cookie.match(new RegExp(`${ADMIN_SESSION_COOKIE}=([^;]+)`))?.[1];
-  if (!isValidAdminSession(session)) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
+  const unauthorized = await requirePortfolioAdmin(request);
+  if (unauthorized) return unauthorized;
 
   const body = await request.json().catch(() => null);
   const slug = typeof body?.slug === "string" ? body.slug : "";
@@ -26,6 +22,9 @@ export async function POST(request: Request) {
   try {
     return NextResponse.json({ items: await moveGalleryItem(slug, direction) });
   } catch (error) {
+    if (error instanceof GalleryRequestError && error.status === 404) {
+      return NextResponse.json({ error: "Gallery ordering is not configured on the server." }, { status: 503 });
+    }
     const statusCode = error instanceof GalleryRequestError && error.status < 500 ? error.status : 500;
     return NextResponse.json({ error: "Could not change the gallery order." }, { status: statusCode });
   }

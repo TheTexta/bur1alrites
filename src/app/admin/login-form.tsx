@@ -2,13 +2,25 @@
 
 import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { requestAdminJson } from "./dashboard/admin-api";
 
 export function LoginForm({ destination, initialMessage }: { destination: string; initialMessage: string }) {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState(initialMessage);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    requestAdminJson<{ ok: true }>("/api/admin/me")
+      .then(() => { if (active) router.replace(destination); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [destination, router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -16,22 +28,19 @@ export function LoginForm({ destination, initialMessage }: { destination: string
     setMessage("");
 
     try {
-      const response = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const body = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        setMessage(body?.error ?? "Unable to sign in.");
-        return;
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
+      try {
+        await requestAdminJson<{ ok: true }>("/api/admin/me");
+      } catch (adminError) {
+        await supabase.auth.signOut();
+        throw adminError;
       }
-
       router.replace(destination);
       router.refresh();
-    } catch {
-      setMessage("Unable to reach the server.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
       setPending(false);
     }
@@ -39,6 +48,18 @@ export function LoginForm({ destination, initialMessage }: { destination: string
 
   return (
     <form onSubmit={submit} className="mt-8 flex flex-col gap-5">
+      <label htmlFor="admin-email" className="flex flex-col gap-2 text-xs uppercase tracking-[0.12em]">
+        Email
+        <input
+          id="admin-email"
+          autoComplete="username"
+          required
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="min-h-12 border border-black bg-transparent px-3 py-3 text-base normal-case focus-visible:outline-2 focus-visible:outline-offset-1"
+        />
+      </label>
       <label htmlFor="admin-password" className="flex flex-col gap-2 text-xs uppercase tracking-[0.12em]">
         Password
         <input

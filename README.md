@@ -22,22 +22,37 @@ cache policy; the small stable manifest and poster revalidate normally.
 1. Create a separate Compose resource from this repository with
    `media-worker` as the working directory.
 2. Copy [`.env.example`](./media-worker/.env.example) to the resource’s `.env`
-   and set the existing Supabase service-role key there. Do not expose that key
-   to the site or browser.
+   and set the existing Supabase service-role key there. Keep that key in the
+   worker and site server environments; never put it in a `NEXT_PUBLIC_` variable.
 3. Deploy. The worker adds the HLS playlist MIME type to the existing public
    `bur1alrites` bucket, processes one MOV at a time, and has no inbound port.
 
 ### Admin gallery
 
-The private editor is available at `/admin`. Configure `ADMIN_PASSWORD` and a
-long random `ADMIN_SESSION_SECRET` in the site deployment environment. Apply
-`supabase/migrations/202608280001_gallery_items.sql` before using the editor;
-the public gallery falls back to its current metadata until the table exists.
+The private editor is available at `/admin` and signs in with Supabase Auth
+email and password. Configure `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and the server-only
+`SUPABASE_SERVICE_ROLE_KEY` in the site deployment. The public anon key comes
+from the same Supabase project as the service-role key.
 
-The admin can edit title, client, type, and year, and can queue new video
-sources for the worker. The current upload route sends files through the Next
-application, so use a direct signed Supabase upload flow before accepting
-large production clips on a serverless host.
+Apply pending SQL files in `supabase/migrations/` in filename order. In the
+current project, `gallery_items` already exists; run
+`202608290001_gallery_ordering.sql` and then
+`202609290001_portfolio_admin_upload_policy.sql` in the Supabase SQL Editor.
+The first defines the `create_gallery_item` and `move_gallery_item` RPCs needed
+by uploads and reordering. The second allows portfolio admins to send staged
+MOVs directly to Storage. Confirm both RPCs appear in the project's PostgREST
+API schema before using the editor.
+
+Create or choose a confirmed email/password user in Supabase Auth, then grant
+that user portfolio access with `npm run admin:access -- <email> grant`. This
+sets `app_metadata.bur1alrites_admin` on the Auth user. Other Supabase users
+cannot access the editor API. To remove access, use `revoke` instead of `grant`.
+
+The browser uploads MOVs directly to Supabase Storage using a signed resumable
+upload. After transfer, the site server moves the file into the portfolio path
+and queues the gallery record for the media worker. MOVs must fit the bucket's
+100 MB limit. The service-role key stays on the server.
 
 For a one-off backfill, run:
 

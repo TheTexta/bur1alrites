@@ -4,7 +4,7 @@ import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { requestAdminJson } from "./admin-api";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function AdminHeader({ hasUnsavedChanges }: { hasUnsavedChanges: boolean }) {
   const router = useRouter();
@@ -17,7 +17,8 @@ export function AdminHeader({ hasUnsavedChanges }: { hasUnsavedChanges: boolean 
     setLoggingOut(true);
     setError("");
     try {
-      await requestAdminJson<{ ok: true }>("/api/admin/logout", { method: "POST" });
+      const { error: signOutError } = await getSupabaseBrowserClient().auth.signOut();
+      if (signOutError) throw signOutError;
       router.replace("/admin");
       router.refresh();
     } catch (logoutError) {

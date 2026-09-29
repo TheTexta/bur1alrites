@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { isValidAdminSession } from "@/lib/admin-auth";
 import { GalleryRequestError, updateGalleryItem } from "@/lib/gallery";
-import { ADMIN_SESSION_COOKIE } from "@/lib/admin-session";
+import { requirePortfolioAdmin } from "@/lib/supabase/admin";
 
 export async function PATCH(request: Request, context: { params: Promise<{ slug: string }> }) {
   const origin = request.headers.get("origin");
@@ -10,12 +9,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ slug:
     return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
 
-  const cookie = request.headers.get("cookie") ?? "";
-  const session = cookie.match(new RegExp(`${ADMIN_SESSION_COOKIE}=([^;]+)`))?.[1];
-
-  if (!isValidAdminSession(session)) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
+  const unauthorized = await requirePortfolioAdmin(request);
+  if (unauthorized) return unauthorized;
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {

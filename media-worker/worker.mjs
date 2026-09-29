@@ -149,6 +149,24 @@ async function listObjects(prefix) {
   }));
 }
 
+async function removeAbandonedUploads() {
+  const prefix = `${SOURCE_PREFIX}/incoming`;
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  const oldUploads = (await listObjects(prefix)).filter((object) =>
+    /^incoming\/[0-9a-f-]+\.mov$/.test(object.name.slice(`${SOURCE_PREFIX}/`.length)) &&
+    object.updated_at && Date.parse(object.updated_at) < cutoff,
+  );
+  if (oldUploads.length === 0) return;
+
+  const response = await storageRequest(`/object/${encodeURIComponent(BUCKET)}`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prefixes: oldUploads.map((object) => object.name) }),
+  });
+  if (!response.ok) throw new Error(`Could not remove abandoned uploads: ${await responseText(response)}`);
+  console.log(`Removed ${oldUploads.length} abandoned upload${oldUploads.length === 1 ? "" : "s"}.`);
+}
+
 async function readObject(objectPath) {
   const response = await fetch(objectPathUrl(objectPath), {
     headers: authHeaders(),
@@ -582,6 +600,9 @@ function isSourceMov(source) {
 
 async function runCycle() {
   await ensureHlsMimeTypes();
+  await removeAbandonedUploads().catch((error) => {
+    console.error("Could not clean up abandoned uploads.", error);
+  });
   const objects = await listObjects(`${SOURCE_PREFIX}/`);
   const sources = objects
     .filter(isSourceMov)

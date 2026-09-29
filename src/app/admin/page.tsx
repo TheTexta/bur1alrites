@@ -1,8 +1,3 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-
-import { ADMIN_SESSION_COOKIE, isValidAdminSession } from "@/lib/admin-auth";
-
 import { LoginForm } from "./login-form";
 
 type SearchParams = Promise<{ expired?: string; next?: string }>;
@@ -14,11 +9,6 @@ function safeDestination(value: string | undefined) {
 export default async function AdminLoginPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const destination = safeDestination(params.next);
-  const session = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
-
-  if (isValidAdminSession(session)) {
-    redirect(destination);
-  }
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-white px-5 py-10 text-black">

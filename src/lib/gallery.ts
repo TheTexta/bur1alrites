@@ -97,6 +97,23 @@ export async function createGalleryItem(item: GalleryItem) {
   return (await response.json()) as GalleryRow[];
 }
 
+export async function getGalleryItem(slug: string) {
+  const response = await galleryRequest(
+    `gallery_items?select=slug&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+  );
+  if (!response.ok) throw new GalleryRequestError("Could not check gallery item.", response.status);
+  return ((await response.json()) as Pick<GalleryRow, "slug">[])[0] ?? null;
+}
+
+export async function galleryUploadIsConfigured() {
+  const response = await galleryRequest("", {
+    headers: { Accept: "application/openapi+json" },
+  });
+  if (!response.ok) throw new GalleryRequestError("Could not check gallery setup.", response.status);
+  const schema = (await response.json()) as { paths?: Record<string, unknown> };
+  return Boolean(schema.paths?.["/rpc/create_gallery_item"]);
+}
+
 export async function deleteProcessingGalleryItem(slug: string) {
   const response = await galleryRequest(
     `gallery_items?slug=eq.${encodeURIComponent(slug)}&status=eq.processing`,
@@ -113,25 +130,4 @@ export async function moveGalleryItem(slug: string, direction: "up" | "down") {
 
   if (!response.ok) throw new GalleryRequestError("Could not reorder gallery item.", response.status);
   return (await response.json()) as GalleryRow[];
-}
-
-export async function uploadPortfolioSource(path: string, body: ArrayBuffer, contentType: string) {
-  const bucket = process.env.SUPABASE_PORTFOLIO_BUCKET ?? "bur1alrites";
-  const response = await fetch(
-    `${getSupabaseUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${path}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: serviceRoleKey(),
-        Authorization: `Bearer ${serviceRoleKey()}`,
-        "content-type": contentType,
-        "cache-control": "max-age=31536000",
-        "x-upsert": "false",
-      },
-      body,
-      cache: "no-store",
-    },
-  );
-
-  if (!response.ok) throw new Error(`Could not upload source: ${response.status}`);
 }
