@@ -65,7 +65,7 @@ export default async function StorageTestPage() {
   );
   const sceneMedia: GallerySceneItem[] = media.map((item) => {
     const path = buildPortfolioStoragePath(item.slug, item.extension);
-    const isVideo = item.extension === "mov";
+    const isVideo = item.extension === "mov" || item.extension === "mp4";
 
     return {
       slug: item.slug,

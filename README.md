@@ -2,17 +2,17 @@
 
 ## Adaptive video delivery
 
-MOV files in `portfolio-images/` are preserved as archival masters. The site
-only requests HLS manifests and segments:
+MOV and MP4 files in `portfolio-images/` are preserved as archival masters.
+The site only requests HLS manifests and segments:
 
 - The hero starts at the 540p HLS rendition and can adapt to 720p/1080p.
 - Gallery clips render as lazily loaded poster planes in the Three.js room. One
   shared HLS player and video texture attach immediately on hover, then stop and
   return the card to its poster when the pointer leaves.
-- Source MOVs are never rendered as a browser video URL.
+- Source videos are never rendered as a browser video URL.
 
 The worker at [media-worker](./media-worker) reconciles the existing bucket
-every five minutes. A new or replaced MOV has a new source fingerprint, so the
+every five minutes. A new or replaced video has a new source fingerprint, so the
 worker creates versioned fMP4 HLS segments and uploads the stable manifest only
 after every segment is present. Immutable versioned segments receive a one-year
 cache policy; the small stable manifest and poster revalidate normally.
@@ -25,7 +25,7 @@ cache policy; the small stable manifest and poster revalidate normally.
    and set the existing Supabase service-role key there. Keep that key in the
    worker and site server environments; never put it in a `NEXT_PUBLIC_` variable.
 3. Deploy. The worker adds the HLS playlist MIME type to the existing public
-   `bur1alrites` bucket, processes one MOV at a time, and has no inbound port.
+   `bur1alrites` bucket, processes one video at a time, and has no inbound port.
 
 ### Admin gallery
 
@@ -35,24 +35,22 @@ email and password. Configure `NEXT_PUBLIC_SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY` in the site deployment. The public anon key comes
 from the same Supabase project as the service-role key.
 
-Apply pending SQL files in `supabase/migrations/` in filename order. In the
-current project, `gallery_items` already exists; run
-`202608290001_gallery_ordering.sql` and then
-`202609290001_portfolio_admin_upload_policy.sql` in the Supabase SQL Editor.
-The first defines the `create_gallery_item` and `move_gallery_item` RPCs needed
-by uploads and reordering. The second allows portfolio admins to send staged
-MOVs directly to Storage. Confirm both RPCs appear in the project's PostgREST
-API schema before using the editor.
+Apply pending SQL files in `supabase/migrations/` in filename order. The
+ordering migration defines the `create_gallery_item` and `move_gallery_item`
+RPCs needed by uploads and reordering. The upload policies allow portfolio
+admins to send staged MOV and MP4 videos directly to Storage. Confirm both RPCs
+appear in the project's PostgREST API schema before using the editor.
 
 Create or choose a confirmed email/password user in Supabase Auth, then grant
 that user portfolio access with `npm run admin:access -- <email> grant`. This
 sets `app_metadata.bur1alrites_admin` on the Auth user. Other Supabase users
 cannot access the editor API. To remove access, use `revoke` instead of `grant`.
 
-The browser uploads MOVs directly to Supabase Storage using a signed resumable
-upload. After transfer, the site server moves the file into the portfolio path
-and queues the gallery record for the media worker. MOVs must fit the bucket's
-100 MB limit. The service-role key stays on the server.
+The browser uploads MOV and MP4 videos directly to Supabase Storage using a
+signed resumable upload. After transfer, the site server moves the file into
+the portfolio path and queues the gallery record for the media worker. Source
+videos must fit the bucket's 100 MB limit. The service-role key stays on the
+server.
 
 For a one-off backfill, run:
 

@@ -11,7 +11,7 @@ import { AdminSessionExpiredError, requestAdminJson } from "./admin-api";
 
 type VideoMetadata = { width: number; height: number; name: string };
 type UploadState = "idle" | "reading" | "uploading" | "success" | "error";
-type SignedUpload = { uploadPath: string; token: string; endpoint: string; bucket: string };
+type SignedUpload = { uploadPath: string; token: string; endpoint: string; bucket: string; contentType: string };
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -110,7 +110,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
           metadata: {
             bucketName: signed.bucket,
             objectName: signed.uploadPath,
-            contentType: "video/quicktime",
+            contentType: signed.contentType,
             cacheControl: "31536000",
           },
           onProgress: (uploaded, total) => setMessage(`Uploading source clip... ${total ? Math.round(uploaded / total * 100) : 0}%`),
@@ -171,8 +171,8 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
           <label htmlFor="clip-file" className="flex min-h-52 cursor-pointer flex-col items-center justify-center border border-dashed border-black px-5 text-center hover:bg-white focus-within:bg-white">
             <Film aria-hidden="true" size={30} strokeWidth={1.4} />
             <span className="mt-4 text-sm font-bold">Choose video</span>
-            <span className="mt-2 max-w-xs break-all text-xs text-black/60">{metadata?.name ?? "MOV video"}</span>
-            <input id="clip-file" required name="file" type="file" accept="video/quicktime,.mov" onChange={readVideoMetadata} className="sr-only" />
+            <span className="mt-2 max-w-xs break-all text-xs text-black/60">{metadata?.name ?? "MOV or MP4 video"}</span>
+            <input id="clip-file" required name="file" type="file" accept="video/quicktime,video/mp4,.mov,.mp4" onChange={readVideoMetadata} className="sr-only" />
           </label>
           <div className="mt-4 flex min-h-11 items-center justify-between border-y border-black py-3 text-sm">
             <span>Resolution</span>

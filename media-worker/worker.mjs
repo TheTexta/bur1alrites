@@ -153,7 +153,7 @@ async function removeAbandonedUploads() {
   const prefix = `${SOURCE_PREFIX}/incoming`;
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const oldUploads = (await listObjects(prefix)).filter((object) =>
-    /^incoming\/[0-9a-f-]+\.mov$/.test(object.name.slice(`${SOURCE_PREFIX}/`.length)) &&
+    /^incoming\/[0-9a-f-]+\.(mov|mp4)$/.test(object.name.slice(`${SOURCE_PREFIX}/`.length)) &&
     object.updated_at && Date.parse(object.updated_at) < cutoff,
   );
   if (oldUploads.length === 0) return;
@@ -540,7 +540,7 @@ async function processSource(source) {
   const workDirectory = await mkdtemp(join(tmpdir(), "bur1alrites-hls-"));
 
   try {
-    const sourcePath = join(workDirectory, "source.mov");
+    const sourcePath = join(workDirectory, `source${extname(source.name).toLowerCase()}`);
     await writeFile(sourcePath, await readObject(source.name));
 
     const video = await inspectVideo(sourcePath);
@@ -589,12 +589,12 @@ async function processSource(source) {
   }
 }
 
-function isSourceMov(source) {
+function isSourceVideo(source) {
   const relativePath = source.name?.slice(`${SOURCE_PREFIX}/`.length) ?? "";
   return (
     source.name?.startsWith(`${SOURCE_PREFIX}/`) &&
     !relativePath.includes("/") &&
-    extname(source.name).toLowerCase() === ".mov"
+    [".mov", ".mp4"].includes(extname(source.name).toLowerCase())
   );
 }
 
@@ -605,14 +605,14 @@ async function runCycle() {
   });
   const objects = await listObjects(`${SOURCE_PREFIX}/`);
   const sources = objects
-    .filter(isSourceMov)
+    .filter(isSourceVideo)
     .filter(
       (source) =>
         !SOURCE_OBJECT_FILTER ||
         source.name === `${SOURCE_PREFIX}/${SOURCE_OBJECT_FILTER.replace(/^\/+/, "")}`,
     );
 
-  console.log(`Scanning ${sources.length} MOV master${sources.length === 1 ? "" : "s"}.`);
+  console.log(`Scanning ${sources.length} video master${sources.length === 1 ? "" : "s"}.`);
 
   for (const source of sources) {
     try {
