@@ -16,6 +16,7 @@ import { HeroScene } from "./hero-scene";
 import type { GallerySceneItem } from "./gallery-three";
 import { GalleryGrid } from "./gallery-grid";
 import { PageRestoreBoundary } from "./page-restore-boundary";
+import { PreviewNavigationBridge } from "./preview-navigation-bridge";
 import { VideoRoom } from "./video-room";
 import { SceneQualityProvider } from "./scene-quality";
 import { getInitialSceneQualityLevel } from "./scene-quality-controller";
@@ -91,6 +92,7 @@ export default async function StorageTestPage() {
 
   return (
     <SceneQualityProvider initialLevel={initialSceneQuality}>
+      <PreviewNavigationBridge />
       <PageRestoreBoundary>
         <section
           aria-label="Portfolio reel"
@@ -129,6 +131,7 @@ export default async function StorageTestPage() {
         <VideoRoom
           preferNativeHls={renderMode === "webkit-safe"}
           isMobile={isMobile}
+          items={sceneMedia}
         />
       </PageRestoreBoundary>
     </SceneQualityProvider>

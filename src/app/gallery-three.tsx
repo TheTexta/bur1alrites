@@ -7,6 +7,10 @@ import * as THREE from "three";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
 import { attachHlsStream, type HlsStreamController } from "@/lib/hls-stream";
+import {
+  getVideoPreviewHref,
+  openPreviewVideo,
+} from "./preview-navigation-bridge";
 import { openVideoRoom } from "./video-room";
 import { HERO_EYE_Y, SCREEN_Z } from "./scene-layout";
 import { VideoThumb } from "./video-thumb";
@@ -91,6 +95,7 @@ export function GalleryMediaSlot({
       <>
         {item.manifestUrl ? (
           <VideoThumb
+            slug={item.slug}
             manifestUrl={item.manifestUrl}
             posterUrl={item.previewUrl}
             width={item.width}
@@ -135,6 +140,7 @@ export function GalleryMediaSlot({
       <button
         {...interactionProps}
         type="button"
+        data-preview-href={getVideoPreviewHref(item.slug)}
         aria-label={`Open ${label}`}
         onClick={() => {
           setGalleryHover(item.slug, false);
@@ -369,12 +375,18 @@ function GalleryPointerController({
     const onClick = (event: MouseEvent) => {
       // detail=0 is a keyboard-generated button click and is handled by GalleryMediaSlot.
       if (event.detail === 0 || document.querySelector('[role="dialog"]')) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("a[href], [data-preview-href]")
+      ) return;
       const item = pick(event.clientX, event.clientY);
       if (!item?.manifestUrl) return;
 
       event.preventDefault();
       event.stopPropagation();
       updateHover(null);
+      if (openPreviewVideo(item.slug)) return;
       openVideoRoom({
         manifestUrl: item.manifestUrl,
         posterUrl: item.previewUrl,

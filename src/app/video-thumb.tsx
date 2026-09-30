@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
 import { attachHlsStream } from "@/lib/hls-stream";
+import { getVideoPreviewHref } from "./preview-navigation-bridge";
 import { openVideoRoom } from "./video-room";
 
 const ACTIVATE_PREVIEW_EVENT = "portfolio:activate-preview";
@@ -13,6 +14,7 @@ const WEBKIT_PRELOAD_MARGIN = "25% 0px";
 type StreamController = Awaited<ReturnType<typeof attachHlsStream>>;
 
 type VideoThumbProps = {
+  slug: string;
   manifestUrl: string;
   posterUrl: string;
   width: number;
@@ -23,6 +25,7 @@ type VideoThumbProps = {
 };
 
 export function VideoThumb({
+  slug,
   manifestUrl,
   posterUrl,
   width,
@@ -238,6 +241,7 @@ export function VideoThumb({
   return (
     <button
       type="button"
+      data-preview-href={getVideoPreviewHref(slug)}
       aria-label={
         playInFrameOnTap
           ? `${isActive ? "Pause" : "Play"} ${label}`

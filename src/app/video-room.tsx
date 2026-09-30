@@ -6,6 +6,8 @@ import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { EffectPass, type EffectComposer as EffectComposerImpl } from "postprocessing";
 import * as THREE from "three";
 
+import type { GallerySceneItem } from "./gallery-three";
+
 import {
   setVideoRoomOpen,
   useMobileView,
@@ -308,9 +310,11 @@ function RoomScene({
 export function VideoRoom({
   preferNativeHls,
   isMobile,
+  items,
 }: {
   preferNativeHls: boolean;
   isMobile: boolean;
+  items: GallerySceneItem[];
 }) {
   const [video, setVideo] = useState<RoomVideo | null>(null);
   // Drives the crossfade: false both before entering and while leaving, true once faded in.
@@ -353,6 +357,20 @@ export function VideoRoom({
     window.addEventListener(OPEN_ROOM_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_ROOM_EVENT, onOpen);
   }, []);
+
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("video");
+    const item = items.find((entry) => entry.slug === slug && entry.manifestUrl);
+    if (!item?.manifestUrl) return;
+
+    openVideoRoom({
+      manifestUrl: item.manifestUrl,
+      posterUrl: item.previewUrl,
+      label: `${item.title}, ${item.client}, ${item.type}, ${item.year}`,
+      width: item.width,
+      height: item.height,
+    });
+  }, [items]);
 
   useEffect(() => {
     if (!video) return;

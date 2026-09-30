@@ -1,5 +1,12 @@
 # bur1alrites
 
+When this site is embedded in the project browser at `dextery.dev`, public page
+links report their destinations to the parent portfolio so they open as the
+top-level page. Standalone browsing is unchanged. The bridge also accepts local
+portfolio development origins.
+Gallery videos have direct links at `/?video=<slug>`. Opening one of these
+links loads the full site with the selected video room open.
+
 ## Adaptive video delivery
 
 MOV and MP4 files in `portfolio-images/` are preserved as archival masters.
