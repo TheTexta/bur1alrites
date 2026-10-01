@@ -6,6 +6,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY worker.mjs ./worker.mjs
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY worker.mjs r2.mjs ./
 
 CMD ["node", "worker.mjs"]

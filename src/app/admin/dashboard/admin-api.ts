@@ -2,7 +2,9 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-export class AdminSessionExpiredError extends Error {}
+export class AdminSessionExpiredError extends Error {
+  constructor(message: string) { super(message); this.name = "AdminSessionExpiredError"; }
+}
 
 export async function requestAdminJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const { data: { session } } = await getSupabaseBrowserClient().auth.getSession();

@@ -1,0 +1,9 @@
+{
+  "name": "bur1alrites-media-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1144.0",
+    "@aws-sdk/lib-storage": "3.1144.0"
+  }
+}

@@ -21,7 +21,7 @@ export type AdminGalleryItem = GalleryItem & {
   processing_error: string | null;
 };
 
-type GalleryRow = AdminGalleryItem & { id: number; created_at: string };
+type GalleryRow = AdminGalleryItem & { id: number; created_at: string; upload_session_id?: string | null };
 
 export class GalleryRequestError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -99,10 +99,10 @@ export async function createGalleryItem(item: GalleryItem) {
 
 export async function getGalleryItem(slug: string) {
   const response = await galleryRequest(
-    `gallery_items?select=slug&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+    `gallery_items?select=*&slug=eq.${encodeURIComponent(slug)}&limit=1`,
   );
   if (!response.ok) throw new GalleryRequestError("Could not check gallery item.", response.status);
-  return ((await response.json()) as Pick<GalleryRow, "slug">[])[0] ?? null;
+  return ((await response.json()) as GalleryRow[])[0] ?? null;
 }
 
 export async function galleryUploadIsConfigured() {
@@ -111,7 +111,7 @@ export async function galleryUploadIsConfigured() {
   });
   if (!response.ok) throw new GalleryRequestError("Could not check gallery setup.", response.status);
   const schema = (await response.json()) as { paths?: Record<string, unknown> };
-  return Boolean(schema.paths?.["/rpc/create_gallery_item"]);
+  return Boolean(schema.paths?.["/rpc/reserve_gallery_upload"]);
 }
 
 export async function deleteProcessingGalleryItem(slug: string) {
@@ -130,4 +130,12 @@ export async function moveGalleryItem(slug: string, direction: "up" | "down") {
 
   if (!response.ok) throw new GalleryRequestError("Could not reorder gallery item.", response.status);
   return (await response.json()) as GalleryRow[];
+}
+
+export async function reserveGalleryUpload(sessionId: string, item: GalleryItem) {
+  const response = await galleryRequest("rpc/reserve_gallery_upload", {
+    method: "POST", body: JSON.stringify({ session_id: sessionId, item }),
+  });
+  if (!response.ok) throw new GalleryRequestError("Could not reserve gallery upload.", response.status);
+  return ((await response.json()) as GalleryRow[])[0];
 }

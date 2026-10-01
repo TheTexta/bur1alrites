@@ -3,15 +3,12 @@
 import { CheckCircle2, Film, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
-import * as tus from "tus-js-client";
-
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-
+import { uploadMultipart } from "@/lib/r2/multipart-upload";
 import { AdminSessionExpiredError, requestAdminJson } from "./admin-api";
 
 type VideoMetadata = { width: number; height: number; name: string };
 type UploadState = "idle" | "reading" | "uploading" | "success" | "error";
-type PreparedUpload = { uploadPath: string; endpoint: string; bucket: string; contentType: string };
+type PreparedUpload = { session: string; partSize: number; partCount: number };
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -24,6 +21,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState("");
+  const [pendingUpload, setPendingUpload] = useState<PreparedUpload | null>(null);
 
   async function readVideoMetadata(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -88,61 +86,49 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
     setState("uploading");
     setMessage("Preparing upload...");
 
+    let prepared: PreparedUpload | undefined = pendingUpload ?? undefined;
+    let finalizing = Boolean(pendingUpload);
     try {
-      const prepared = await requestAdminJson<PreparedUpload>("/api/admin/upload", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...details, fileName: file.name, fileSize: file.size }),
-      });
-      const { data: { session } } = await getSupabaseBrowserClient().auth.getSession();
-      if (!session) throw new AdminSessionExpiredError("Your session ended.");
-      await new Promise<void>((resolve, reject) => {
-        const upload = new tus.Upload(file, {
-          endpoint: prepared.endpoint,
-          chunkSize: 6 * 1024 * 1024,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          uploadDataDuringCreation: true,
-          removeFingerprintOnSuccess: true,
-          onBeforeRequest: async (request) => {
-            const { data: { session: currentSession } } = await getSupabaseBrowserClient().auth.getSession();
-            if (!currentSession) throw new AdminSessionExpiredError("Your session ended.");
-            request.setHeader("authorization", `Bearer ${currentSession.access_token}`);
-          },
-          metadata: {
-            bucketName: prepared.bucket,
-            objectName: prepared.uploadPath,
-            contentType: prepared.contentType,
-            cacheControl: "31536000",
-          },
-          onProgress: (uploaded, total) => setMessage(`Uploading source clip... ${total ? Math.round(uploaded / total * 100) : 0}%`),
-          onError: reject,
-          onSuccess: () => resolve(),
+      if (!prepared) {
+        prepared = await requestAdminJson<PreparedUpload>("/api/admin/upload", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...details, fileName: file.name, fileSize: file.size }),
         });
-        upload.start();
-      });
+        await uploadMultipart(file, prepared, requestAdminJson, percent => setMessage(`Uploading source clip... ${percent}%`));
+        setPendingUpload(prepared);
+      }
       setMessage("Adding clip to gallery...");
-      await requestAdminJson<{ item: unknown }>("/api/admin/upload", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...details, uploadPath: prepared.uploadPath }),
-      });
+      finalizing = true;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await requestAdminJson<{ item: unknown }>("/api/admin/upload", {
+            method: "PUT", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ session: prepared.session }),
+          });
+          break;
+        } catch (error) {
+          if (attempt >= 2 || error instanceof AdminSessionExpiredError) throw error;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
       form.reset();
+      setPendingUpload(null);
       setMetadata(null);
       setState("success");
       setMessage("Clip queued for processing.");
     } catch (error) {
-      if (error instanceof AdminSessionExpiredError ||
-          (error instanceof tus.DetailedError && error.causingError instanceof AdminSessionExpiredError) ||
-          (error instanceof tus.DetailedError && error.originalResponse?.getStatus() === 401)) {
+      if (prepared && !finalizing) {
+        await requestAdminJson("/api/admin/upload", {
+          method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: prepared.session }),
+        }).catch(() => {});
+      }
+      if (error instanceof AdminSessionExpiredError) {
         router.replace("/admin?expired=1&next=/admin/dashboard");
         return;
       }
       setState("error");
-      if (error instanceof tus.DetailedError && error.originalResponse?.getStatus() === 403) {
-        setMessage("Storage denied this upload. Ask the site administrator to check the portfolio upload policy.");
-      } else {
-        setMessage(error instanceof Error ? error.message : "Upload failed.");
-      }
+      setMessage(`${error instanceof Error ? error.message : "Upload failed."}${finalizing ? " Keep this page open and retry adding the uploaded clip." : ""}`);
       return;
     }
 
@@ -168,7 +154,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
         <h2 id="upload-heading" className="mt-2 text-3xl">Add clip</h2>
       </div>
       <form ref={formRef} onSubmit={submit} className="grid gap-10 py-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <fieldset className="min-w-0">
+        <fieldset disabled={busy || Boolean(pendingUpload)} className="min-w-0">
           <legend className="mb-5 text-xs uppercase tracking-[0.16em]">Source</legend>
           <label htmlFor="clip-file" className="flex min-h-52 cursor-pointer flex-col items-center justify-center border border-dashed border-black px-5 text-center hover:bg-white focus-within:bg-white">
             <Film aria-hidden="true" size={30} strokeWidth={1.4} />
@@ -199,6 +185,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
               <input
                 id={`clip-${name}`}
                 required
+                disabled={busy || Boolean(pendingUpload)}
                 name={name}
                 placeholder={placeholder}
                 defaultValue={name === "type" || name === "year" ? placeholder : undefined}
@@ -211,7 +198,7 @@ export function UploadForm({ onUploaded }: { onUploaded: () => Promise<void> }) 
             className="mt-2 flex min-h-12 items-center justify-center gap-2 border border-black bg-black px-4 text-sm text-white hover:bg-transparent hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-black disabled:opacity-35 sm:col-span-2"
           >
             <Upload aria-hidden="true" size={17} />
-            {state === "uploading" ? "Uploading..." : "Upload clip"}
+            {state === "uploading" ? "Uploading..." : pendingUpload ? "Retry adding clip" : "Upload clip"}
           </button>
           <p aria-live="polite" className={`min-h-5 text-sm sm:col-span-2 ${state === "error" ? "text-red-700" : ""}`}>
             {message}

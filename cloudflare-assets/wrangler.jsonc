@@ -1,0 +1,16 @@
+{
+  "name": "dextery-assets",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "media.dextery.dev", "custom_domain": true },
+    { "pattern": "images.dextery.dev/bur1alrites/*", "zone_name": "dextery.dev" },
+    { "pattern": "images.dextery.dev/elliotmairet/*", "zone_name": "dextery.dev" }
+  ],
+  "r2_buckets": [
+    { "binding": "BUR1ALRITES", "bucket_name": "bur1alrites" },
+    { "binding": "ELLIOTMAIRET", "bucket_name": "elliotmairet" }
+  ],
+  "observability": { "enabled": true }
+}

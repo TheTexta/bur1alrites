@@ -1,7 +1,7 @@
 const DEFAULT_IMAGE_BASE_PATH = "portfolio-images";
 const DEFAULT_EXTENSION = "webp";
 
-// Supabase Storage only accepts cacheControl at write time; set it on upload.
+// Apply the cache policy when writing media objects.
 export const PORTFOLIO_CACHE_CONTROL_SECONDS = "31536000";
 export const PORTFOLIO_CACHE_CONTROL_HEADER = `max-age=${PORTFOLIO_CACHE_CONTROL_SECONDS}`;
 

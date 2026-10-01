@@ -9,9 +9,9 @@ import {
   buildPortfolioVideoPosterPath,
 } from "@/lib/portfolio/config";
 import {
-  buildSupabaseStoragePublicUrl,
-  buildSupabaseStorageRenderUrl,
-} from "@/lib/supabase/config";
+  buildMediaPublicUrl,
+  buildImagePublicUrl,
+} from "@/lib/media/config";
 import type { AdminGalleryItem } from "@/lib/gallery";
 
 export function AdminVideoPreview({ item }: { item: AdminGalleryItem }) {
@@ -35,7 +35,7 @@ export function AdminVideoPreview({ item }: { item: AdminGalleryItem }) {
     try {
       controllerRef.current = await attachHlsStream(
         video,
-        buildSupabaseStoragePublicUrl(buildPortfolioStreamManifestPath(item.slug)),
+        buildMediaPublicUrl(buildPortfolioStreamManifestPath(item.slug)),
         { startLevel: 0, onFatalError: () => setError("Preview is unavailable.") },
       );
       setActive(true);
@@ -80,7 +80,7 @@ export function AdminVideoPreview({ item }: { item: AdminGalleryItem }) {
         playsInline
         preload="none"
         controls={active}
-        poster={buildSupabaseStorageRenderUrl(
+        poster={buildImagePublicUrl(
           buildPortfolioVideoPosterPath(item.slug),
           { width: 960, quality: 75 },
         )}

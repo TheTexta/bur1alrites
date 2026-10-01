@@ -1,15 +1,18 @@
-import { createHash } from "node:crypto";
+import { r2Configuration, listObjects as listR2Objects, headObject, getObject, putObject, deleteObject, sourceVersion as r2SourceVersion } from "./r2.mjs";
 import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative } from "node:path";
 import { spawn } from "node:child_process";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+
+for (const path of [".env", ".env.local"]) {
+  try { process.loadEnvFile(path); } catch (error) { if (error.code !== "ENOENT") throw error; }
+}
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const BUCKET = process.env.SUPABASE_PORTFOLIO_BUCKET ?? "bur1alrites";
+
 const SOURCE_PREFIX = (process.env.HLS_SOURCE_PREFIX ?? "portfolio-images")
   .replace(/^\/+|\/+$/g, "");
 const POLL_INTERVAL_SECONDS = positiveInteger(
@@ -28,10 +31,7 @@ const CATALOG_ENABLED = Boolean(SUPABASE_URL && SERVICE_ROLE_KEY);
 const VERSIONED_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const CURRENT_CACHE_CONTROL = "no-cache";
 const HLS_MANIFEST_MIME_TYPE = "application/vnd.apple.mpegurl";
-const HLS_REQUIRED_MIME_TYPES = new Set([
-  HLS_MANIFEST_MIME_TYPE,
-  "video/mp4",
-]);
+
 
 const VARIANT_PROFILES = [
   { id: "540p", shortSide: 540, bitrate: 1_000_000, maxRate: 1_250_000 },
@@ -47,6 +47,7 @@ function positiveInteger(value, fallback) {
 function requireConfiguration() {
   const missing = [];
 
+  r2Configuration();
   if (!SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
   if (!SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -60,36 +61,6 @@ function authHeaders() {
     apikey: SERVICE_ROLE_KEY,
     Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
   };
-}
-
-function encodeStoragePath(value) {
-  return value
-    .replace(/^\/+|\/+$/g, "")
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
-
-function storageUrl(path) {
-  return `${SUPABASE_URL}/storage/v1${path}`;
-}
-
-function objectPathUrl(objectPath) {
-  return storageUrl(
-    `/object/${encodeURIComponent(BUCKET)}/${encodeStoragePath(objectPath)}`,
-  );
-}
-
-async function storageRequest(path, init = {}) {
-  const response = await fetch(storageUrl(path), {
-    ...init,
-    headers: {
-      ...authHeaders(),
-      ...(init.headers ?? {}),
-    },
-  });
-
-  return response;
 }
 
 async function catalogRequest(path, init = {}) {
@@ -107,7 +78,7 @@ async function updateCatalogStatus(slug, status, processingError = null) {
   if (!CATALOG_ENABLED) return;
 
   const response = await catalogRequest(
-    `gallery_items?slug=eq.${encodeURIComponent(slug)}`,
+    `gallery_items?slug=eq.${encodeURIComponent(slug)}&status=neq.archived`,
     {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -126,131 +97,46 @@ async function responseText(response) {
 }
 
 async function listObjects(prefix) {
-  const response = await storageRequest(`/object/list/${encodeURIComponent(BUCKET)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      prefix,
-      limit: 1000,
-      offset: 0,
-      sortBy: { column: "name", order: "asc" },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Could not list storage objects: ${await responseText(response)}`);
-  }
-
-  const objects = await response.json();
-  const normalizedPrefix = prefix.replace(/\/+$/, "");
-
-  return objects.map((object) => ({
-    ...object,
-    name: object.name.startsWith(`${normalizedPrefix}/`)
-      ? object.name
-      : `${normalizedPrefix}/${object.name}`,
+  return (await listR2Objects(prefix)).map(object => ({
+    ...object, name: object.Key, updated_at: object.LastModified?.toISOString(),
+    metadata: { size: object.Size, eTag: object.ETag },
   }));
 }
 
 async function removeAbandonedUploads() {
-  const prefix = `${SOURCE_PREFIX}/incoming`;
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-  const oldUploads = (await listObjects(prefix)).filter((object) =>
-    /^incoming\/[0-9a-f-]+\.(mov|mp4)$/.test(object.name.slice(`${SOURCE_PREFIX}/`.length)) &&
-    object.updated_at && Date.parse(object.updated_at) < cutoff,
-  );
-  if (oldUploads.length === 0) return;
-
-  const response = await storageRequest(`/object/${encodeURIComponent(BUCKET)}`, {
-    method: "DELETE",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ prefixes: oldUploads.map((object) => object.name) }),
-  });
-  if (!response.ok) throw new Error(`Could not remove abandoned uploads: ${await responseText(response)}`);
-  console.log(`Removed ${oldUploads.length} abandoned upload${oldUploads.length === 1 ? "" : "s"}.`);
+  for (const object of await listObjects(`${SOURCE_PREFIX}/incoming/`)) {
+    if (!object.LastModified || object.LastModified.getTime() >= cutoff) continue;
+    const info = await headObject(object.name);
+    const sessionId = info?.Metadata?.["upload-session-id"];
+    // Only clean a reserved record when this upload never reached its final key.
+    if (sessionId && info.Metadata?.["destination-key"] && !(await headObject(info.Metadata["destination-key"]))) {
+      const response = await catalogRequest(`gallery_items?upload_session_id=eq.${encodeURIComponent(sessionId)}&status=eq.processing`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not clean an abandoned gallery reservation.");
+    }
+    await deleteObject(object.name);
+    console.log(`Removed abandoned upload ${object.name}.`);
+  }
 }
 
 async function downloadObject(objectPath, destinationPath) {
-  const response = await fetch(objectPathUrl(objectPath), {
-    headers: authHeaders(),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Could not read ${objectPath}: ${await responseText(response)}`);
-  }
-
-  if (!response.body) throw new Error(`Could not stream ${objectPath}: empty response body.`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(destinationPath));
+  const object = await getObject(objectPath);
+  if (!object.Body) throw new Error(`Could not stream ${objectPath}: empty response body.`);
+  await pipeline(object.Body, createWriteStream(destinationPath));
 }
 
 async function readObjectIfPresent(objectPath) {
-  const response = await fetch(objectPathUrl(objectPath), {
-    headers: authHeaders(),
-  });
-
-  if (response.ok) {
-    return Buffer.from(await response.arrayBuffer());
+  try {
+    const object = await getObject(objectPath);
+    return Buffer.from(await object.Body.transformToByteArray());
+  } catch (error) {
+    if (error?.$metadata?.httpStatusCode === 404) return null;
+    throw error;
   }
-
-  if (response.status === 400 || response.status === 404) {
-    return null;
-  }
-
-  throw new Error(`Could not read ${objectPath}: ${await responseText(response)}`);
 }
 
 async function uploadObject(objectPath, body, contentType, cacheControl) {
-  const response = await fetch(objectPathUrl(objectPath), {
-    method: "POST",
-    headers: {
-      ...authHeaders(),
-      "content-type": contentType,
-      "cache-control": cacheControl,
-      "x-upsert": "true",
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Could not upload ${objectPath}: ${await responseText(response)}`);
-  }
-}
-
-async function ensureHlsMimeTypes() {
-  const bucketResponse = await storageRequest(`/bucket/${encodeURIComponent(BUCKET)}`);
-
-  if (!bucketResponse.ok) {
-    throw new Error(`Could not read bucket settings: ${await responseText(bucketResponse)}`);
-  }
-
-  const bucket = await bucketResponse.json();
-  const allowedMimeTypes = new Set(bucket.allowed_mime_types ?? []);
-  let changed = false;
-
-  for (const mimeType of HLS_REQUIRED_MIME_TYPES) {
-    if (!allowedMimeTypes.has(mimeType)) {
-      allowedMimeTypes.add(mimeType);
-      changed = true;
-    }
-  }
-
-  if (!changed) return;
-
-  const updateResponse = await storageRequest(`/bucket/${encodeURIComponent(BUCKET)}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      public: bucket.public,
-      file_size_limit: bucket.file_size_limit,
-      allowed_mime_types: [...allowedMimeTypes],
-    }),
-  });
-
-  if (!updateResponse.ok) {
-    throw new Error(`Could not enable HLS MIME types: ${await responseText(updateResponse)}`);
-  }
-
-  console.log(`Enabled HLS MIME types for ${BUCKET}.`);
+  await putObject(objectPath, body, contentType, cacheControl);
 }
 
 function command(commandName, args) {
@@ -477,16 +363,6 @@ function contentTypeFor(filePath) {
   }
 }
 
-function sourceVersion(source) {
-  const fingerprint = [
-    source.name,
-    source.metadata?.eTag,
-    source.updated_at,
-  ].join(":");
-
-  return createHash("sha256").update(fingerprint).digest("hex").slice(0, 12);
-}
-
 function sourceSlug(sourceName) {
   return basename(sourceName, extname(sourceName))
     .toLowerCase()
@@ -531,10 +407,13 @@ async function currentMasterIncludes(masterPath, version) {
 
 async function processSource(source) {
   const slug = sourceSlug(source.name);
-  const version = sourceVersion(source);
+  const sourceMetadata = await headObject(source.name);
+  if (!sourceMetadata) return;
+  const version = r2SourceVersion({ ...source, ...sourceMetadata });
   const masterPath = currentMasterPath(slug);
 
   if (await currentMasterIncludes(masterPath, version)) {
+    await updateCatalogStatus(slug, "published");
     console.log(`skip  ${source.name} (${version} already published)`);
     return;
   }
@@ -612,7 +491,6 @@ function isSourceVideo(source) {
 }
 
 async function runCycle() {
-  await ensureHlsMimeTypes();
   await removeAbandonedUploads().catch((error) => {
     console.error("Could not clean up abandoned uploads.", error);
   });

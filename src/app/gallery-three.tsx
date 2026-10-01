@@ -6,7 +6,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
-import { attachHlsStream, type HlsStreamController } from "@/lib/hls-stream";
+import { createViewportVideoPool } from "@/lib/viewport-video-pool";
 import {
   getVideoPreviewHref,
   openPreviewVideo,
@@ -183,121 +183,78 @@ function GalleryVideoController({
         .filter((item) => item.manifestUrl)
         .map((item) => [item.slug, item.manifestUrl!]),
     );
-    const video = document.createElement("video");
-    video.muted = true;
-    video.loop = true;
-    video.playsInline = true;
-    video.preload = "auto";
-    video.crossOrigin = "anonymous";
+    let videoTexture: THREE.VideoTexture | null = null;
+    let activeVideo: HTMLVideoElement | null = null;
 
-    // This texture and video element are shared by every card. Switching cards only changes the
-    // HLS source, so the gallery never owns more than one video decoder or frame upload stream.
-    const videoTexture = new THREE.VideoTexture(video);
-    videoTexture.colorSpace = THREE.NoColorSpace;
-    videoTexture.generateMipmaps = false;
-    videoTexture.minFilter = THREE.LinearFilter;
-    videoTexture.magFilter = THREE.LinearFilter;
-    playback.videoTexture = videoTexture;
-
-    let controller: HlsStreamController | null = null;
-    let requestVersion = 0;
-    let disposed = false;
-
-    const clearVideo = () => {
-      requestVersion += 1;
+    const clearTexture = () => {
       playback.loadingSlug = null;
       playback.videoSlug = null;
-      video.pause();
-      controller?.destroy();
-      controller = null;
-      video.removeAttribute("src");
-      video.load();
+      playback.videoTexture = null;
+      activeVideo = null;
+      videoTexture?.dispose();
+      videoTexture = null;
     };
 
-    const markFirstFrame = () => {
-      const slug = playback.loadingSlug;
-      if (!slug || playback.hoveredSlug !== slug) return;
-
-      if ("requestVideoFrameCallback" in video) {
-        video.requestVideoFrameCallback(() => {
-          if (playback.hoveredSlug === slug && playback.loadingSlug === slug) {
-            playback.videoSlug = slug;
-          }
-        });
-      } else {
+    const pool = createViewportVideoPool(videos, {
+      preferNative,
+      onReady: (slug, video) => {
+        if (playback.hoveredSlug !== slug) return;
+        activeVideo = video;
+        if (!videoTexture) {
+          videoTexture = new THREE.VideoTexture(video);
+          videoTexture.colorSpace = THREE.NoColorSpace;
+          videoTexture.generateMipmaps = false;
+          videoTexture.minFilter = THREE.LinearFilter;
+          videoTexture.magFilter = THREE.LinearFilter;
+          videoTexture.needsUpdate = true;
+          playback.videoTexture = videoTexture;
+        }
         playback.videoSlug = slug;
-      }
-    };
-
-    video.addEventListener("loadeddata", markFirstFrame);
+      },
+    });
 
     const activate = (slug: string) => {
-      playback.hoveredSlug = slug;
-      const manifestUrl = videos.get(slug);
-
-      if (!manifestUrl) {
-        clearVideo();
-        playback.hoveredSlug = slug;
-        return;
-      }
-
-      if (playback.loadingSlug === slug) return;
-
-      clearVideo();
+      if (playback.hoveredSlug === slug && activeVideo) return;
+      pool.deactivate();
+      clearTexture();
       playback.hoveredSlug = slug;
       playback.loadingSlug = slug;
-      const version = requestVersion;
-
-      // There is deliberately no hover debounce. The static poster remains assigned to the card
-      // until loadeddata/requestVideoFrameCallback confirms that a real decoded frame is ready.
-      void attachHlsStream(video, manifestUrl, {
-        startLevel: 0,
-        preferNative,
-      }).then(
-        (nextController) => {
-          if (
-            disposed ||
-            version !== requestVersion ||
-            playback.hoveredSlug !== slug
-          ) {
-            nextController.destroy();
-            return;
-          }
-
-          controller = nextController;
-          controller.startLoading();
-          void video.play().catch(() => {});
-          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) markFirstFrame();
-        },
-        () => {
-          if (version === requestVersion && playback.loadingSlug === slug) {
-            playback.loadingSlug = null;
-          }
-        },
-      );
+      activeVideo = pool.activate(slug);
     };
 
     const onHover = (event: Event) => {
       const { slug, active } = (event as CustomEvent<GalleryHoverDetail>).detail;
-
-      if (active) {
-        activate(slug);
-      } else if (playback.hoveredSlug === slug) {
+      if (active) activate(slug);
+      else if (playback.hoveredSlug === slug) {
         playback.hoveredSlug = null;
-        clearVideo();
+        pool.deactivate(slug);
+        clearTexture();
       }
     };
 
+    const observed = new Map<Element, string>();
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const slug = observed.get(entry.target);
+        if (slug) pool.setVisible(slug, entry.isIntersecting);
+      }
+    }, { rootMargin: "25% 0px", threshold: 0.01 });
+    items.forEach((item, index) => {
+      if (!item.manifestUrl) return;
+      const element = document.querySelector(`[data-gallery-plane="${index}"]`);
+      if (element) {
+        observed.set(element, item.slug);
+        observer.observe(element);
+      }
+    });
     window.addEventListener(GALLERY_HOVER_EVENT, onHover);
 
     return () => {
-      disposed = true;
+      observer.disconnect();
       window.removeEventListener(GALLERY_HOVER_EVENT, onHover);
-      video.removeEventListener("loadeddata", markFirstFrame);
       playback.hoveredSlug = null;
-      clearVideo();
-      playback.videoTexture = null;
-      videoTexture.dispose();
+      pool.dispose();
+      clearTexture();
     };
   }, [items, playbackRef, preferNative]);
 

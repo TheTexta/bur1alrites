@@ -8,6 +8,7 @@ type AttachHlsStreamOptions = {
   startLevel?: number;
   onFatalError?: () => void;
   preferNative?: boolean;
+  preview?: boolean;
 };
 
 const HLS_MIME_TYPE = "application/vnd.apple.mpegurl";
@@ -35,10 +36,12 @@ export async function attachHlsStream(
   if (Hls.isSupported()) {
     const player = new Hls({
       autoStartLoad: true,
-      capLevelToPlayerSize: true,
-      maxBufferLength: 12,
+      capLevelToPlayerSize: !options.preview,
+      maxBufferLength: options.preview ? 4 : 12,
+      ...(options.preview ? { maxMaxBufferLength: 4 } : {}),
       startLevel: options.startLevel ?? -1,
     });
+    if (options.preview) player.autoLevelCapping = 0;
 
     player.on(Hls.Events.ERROR, (_, data) => {
       if (data.fatal) {

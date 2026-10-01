@@ -9,7 +9,7 @@ import { getVideoPreviewHref } from "./preview-navigation-bridge";
 import { openVideoRoom } from "./video-room";
 
 const ACTIVATE_PREVIEW_EVENT = "portfolio:activate-preview";
-const WEBKIT_PRELOAD_MARGIN = "25% 0px";
+const PRELOAD_MARGIN = "25% 0px";
 
 type StreamController = Awaited<ReturnType<typeof attachHlsStream>>;
 
@@ -52,9 +52,7 @@ export function VideoThumb({
       if (
         !video ||
         activeVideo === video ||
-        (!activeRef.current &&
-          (isWebKitSafe ||
-            (!controllerRef.current && !attachPromiseRef.current)))
+        !activeRef.current
       ) {
         return;
       }
@@ -65,7 +63,8 @@ export function VideoThumb({
       setIsActive(false);
       setHasFirstFrame(false);
 
-      if (!isWebKitSafe || !nearViewportRef.current) {
+      controllerRef.current?.stopLoading();
+      if (!nearViewportRef.current) {
         attachPromiseRef.current = null;
         controllerRef.current?.destroy();
         controllerRef.current = null;
@@ -77,14 +76,12 @@ export function VideoThumb({
     return () => {
       window.removeEventListener(ACTIVATE_PREVIEW_EVENT, handlePreviewActivation);
       activeRef.current = false;
-      attachPromiseRef.current = null;
-      controllerRef.current?.destroy();
     };
-  }, [isWebKitSafe]);
+  }, []);
 
   useEffect(() => {
     const video = ref.current;
-    if (!video || !isWebKitSafe) return;
+    if (!video) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -96,7 +93,8 @@ export function VideoThumb({
           if (!controllerRef.current && !attachPromiseRef.current) {
             const request = attachHlsStream(video, manifestUrl, {
               startLevel: 0,
-              preferNative: true,
+              preferNative: isWebKitSafe,
+              preview: true,
             });
             attachPromiseRef.current = request;
 
@@ -105,6 +103,7 @@ export function VideoThumb({
                 if (attachPromiseRef.current === request) {
                   controllerRef.current = controller;
                   attachPromiseRef.current = null;
+                  if (!activeRef.current && video.readyState >= 2) controller.stopLoading();
                 } else {
                   controller.destroy();
                 }
@@ -122,13 +121,20 @@ export function VideoThumb({
 
         video.preload = "none";
 
-        if (!activeRef.current) {
-          attachPromiseRef.current = null;
-          controllerRef.current?.destroy();
-          controllerRef.current = null;
+        if (activeRef.current) {
+          activeRef.current = false;
+          video.pause();
+          video.currentTime = 0;
+          setIsActive(false);
+          setHasFirstFrame(false);
         }
+        attachPromiseRef.current = null;
+        controllerRef.current?.destroy();
+        controllerRef.current = null;
+        video.removeAttribute("src");
+        video.load();
       },
-      { rootMargin: WEBKIT_PRELOAD_MARGIN, threshold: 0.01 },
+      { rootMargin: PRELOAD_MARGIN, threshold: 0.01 },
     );
 
     observer.observe(video);
@@ -136,6 +142,12 @@ export function VideoThumb({
     return () => {
       nearViewportRef.current = false;
       observer.disconnect();
+      attachPromiseRef.current = null;
+      controllerRef.current?.destroy();
+      controllerRef.current = null;
+      video.preload = "none";
+      video.removeAttribute("src");
+      video.load();
     };
   }, [isWebKitSafe, manifestUrl]);
 
@@ -154,6 +166,7 @@ export function VideoThumb({
           request = attachHlsStream(video, manifestUrl, {
             startLevel: 0,
             preferNative: isWebKitSafe,
+            preview: true,
           });
           attachPromiseRef.current = request;
         }
@@ -166,11 +179,8 @@ export function VideoThumb({
         }
 
         if (!activeRef.current) {
-          if (!isWebKitSafe) {
+          if (nearViewportRef.current) {
             controller.stopLoading();
-            controllerRef.current = controller;
-            if (attachPromiseRef.current === request) attachPromiseRef.current = null;
-          } else if (nearViewportRef.current) {
             controllerRef.current = controller;
             if (attachPromiseRef.current === request) attachPromiseRef.current = null;
           } else {
@@ -209,9 +219,8 @@ export function VideoThumb({
       video.currentTime = 0;
     }
 
-    if (!isWebKitSafe) {
-      controllerRef.current?.stopLoading();
-    } else if (!nearViewportRef.current) {
+    controllerRef.current?.stopLoading();
+    if (!nearViewportRef.current) {
       attachPromiseRef.current = null;
       controllerRef.current?.destroy();
       controllerRef.current = null;
@@ -282,6 +291,7 @@ export function VideoThumb({
           className="pointer-events-none block h-full w-full object-cover"
           onLoadedData={() => {
             if (isWebKitSafe && activeRef.current) setHasFirstFrame(true);
+            if (!activeRef.current) controllerRef.current?.stopLoading();
           }}
         />
         {isWebKitSafe ? (

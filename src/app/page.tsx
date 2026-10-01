@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 
 import {
-  buildSupabaseStoragePublicUrl,
-  buildSupabaseStorageRenderUrl,
-} from "@/lib/supabase/config";
+  buildMediaPublicUrl,
+  buildImagePublicUrl,
+} from "@/lib/media/config";
 import {
   buildPortfolioStoragePath,
   buildPortfolioStreamManifestPath,
@@ -61,7 +61,7 @@ export default async function StorageTestPage() {
   );
   const initialSceneQuality = getInitialSceneQualityLevel(isMobile);
   const media = galleryItems === null ? MEDIA : galleryItems;
-  const heroManifestUrl = buildSupabaseStoragePublicUrl(
+  const heroManifestUrl = buildMediaPublicUrl(
     buildPortfolioStreamManifestPath("hero"),
   );
   const sceneMedia: GallerySceneItem[] = media.map((item) => {
@@ -71,13 +71,13 @@ export default async function StorageTestPage() {
     return {
       slug: item.slug,
       previewUrl: isVideo
-        ? buildSupabaseStorageRenderUrl(
+        ? buildImagePublicUrl(
             buildPortfolioVideoPosterPath(item.slug),
             { width: 960, quality: 75 },
           )
-        : buildSupabaseStorageRenderUrl(path, { width: 960, quality: 75 }),
+        : buildImagePublicUrl(path, { width: 960, quality: 75 }),
       manifestUrl: isVideo
-        ? buildSupabaseStoragePublicUrl(
+        ? buildMediaPublicUrl(
             buildPortfolioStreamManifestPath(item.slug),
           )
         : null,
