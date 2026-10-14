@@ -77,6 +77,16 @@ with `npm run admin:access -- <email> grant`; use `revoke` to remove it. The API
 requires the user's `app_metadata.bur1alrites_admin` claim and checks request
 origins.
 
+The application uses its server-side Supabase service role for the
+`create_gallery_item` and `move_gallery_item` RPCs after checking admin access.
+Both RPCs are `SECURITY DEFINER` and must not be executable by `anon` or
+`authenticated` directly. Apply the append-only
+`20261014213549_restrict_gallery_rpc_execution.sql` migration to an existing
+installation as its function owner (`supabase_admin`) or a role authorized to
+change its grants. The migration asserts the effective grants and keeps
+service-role execution available. Do not call these mutating RPCs merely to test
+permissions.
+
 The browser uploads MOV or MP4 files up to 5 GiB directly to R2 using 32 MiB
 multipart chunks and at most three concurrent transfers. Failed parts use fresh
 signed URLs and bounded retries. Keep the page open until completion; upload
