@@ -1,5 +1,13 @@
 # R2 rollout status — 2026-10-01
 
+Historical record: this branch prepares the retirement of this application's
+Worker publisher. Merge it only **after** a separately verified handoff of
+production `dextery-assets` publishing to the private
+`TheTexta/dextery-infrastructure` repository. The old Worker source/config is
+retained for rollback, but the branch removes its application deploy scripts.
+The commands below describe the original October 1 rollout, not the new publish
+path. Do not run a direct Wrangler deploy from this checkout.
+
 Production cutover is complete for both sites:
 
 | Project | Site | Images | Media |
@@ -15,11 +23,13 @@ Production cutover is complete for both sites:
   bucket attachment remains intact. The two namespaced image routes were added
   manually in the Cloudflare dashboard and verified live. Legacy Elliot root
   image URLs and existing `/cdn-cgi/image/` URLs remain available.
-- The current account token cannot write zone routes or inspect DNS records.
-  Subsequent Worker code changes use `npm run assets:publish`, which uploads and
-  deploys a Worker version while preserving dashboard-managed routes. Full
-  provisioning through `assets:deploy` still requires the documented zone
-  permissions. No unrelated DNS records were changed.
+- At the time of the October 1 cutover, the account token could not write zone
+  routes or inspect DNS records. Worker code updates then used the **former**
+  `npm run assets:publish` script to upload and deploy a version while preserving
+  dashboard-managed routes. The **former** `assets:deploy` path needed the
+  documented zone permissions. The ownership-handoff branch removes both
+  commands; future Worker publishing belongs only to dextery-infrastructure.
+  No unrelated DNS records were changed during the historical cutover.
 - Both Vercel applications have their namespaced production environment values
   and passed production builds. bur1alrites deployment is
   `dpl_4x3oNRt5rKV5gaHzrSYCNFr7acbX`; Elliot deployment is

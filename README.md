@@ -46,21 +46,21 @@ through the media hostname using Cloudflare's `cf.image` transformation API.
 
 ```bash
 npm run r2:setup                    # Inspect the bucket without writing
-npm run r2:setup -- --apply --bucket-only
-npm run assets:check                # Compile the Worker without deploying
-npm run assets:deploy               # Configure bucket CORS and deploy routes
-npm run assets:publish              # Update Worker code; preserve existing routes
+npm run r2:setup -- --apply          # Configure this site's bucket and upload CORS only
+npm run assets:check                # Compile the retained Worker snapshot without deploying
 ```
 
-Provisioning requires account Workers Scripts and Workers R2 Storage write
-permissions, zone read access, Workers Routes edit permission for `dextery.dev`,
-and DNS read access to inspect conflicts. If routes are managed manually in the
-dashboard, use `assets:publish` for subsequent code updates: version uploads and
-deployment preserve those routes without requiring zone route-write access.
-The setup script rejects conflicting
-Worker ownership and preserves unrelated records. Upload CORS includes the
-configured `NEXT_PUBLIC_SITE_URL` and local development origins; configure the
-site's production origin before provisioning.
+The shared `dextery-assets` Worker is published only from the private
+`TheTexta/dextery-infrastructure` repository after its separately verified
+ownership handoff. This site's setup script now manages only the bur1alrites
+bucket and its upload CORS; it cannot deploy routes or Worker versions.
+`--bucket-only` remains accepted for compatibility with older setup commands.
+Its bucket/CORS operations require an R2-capable token, while Worker publishing
+has separate permissions and an approval gate in the infrastructure repo.
+Retaining a Wrangler dry-run and historical Worker config does not authorize
+running `wrangler deploy` directly from this application checkout.
+Upload CORS includes the configured `NEXT_PUBLIC_SITE_URL` and local development
+origins; configure the production origin before provisioning.
 
 ## Admin gallery
 

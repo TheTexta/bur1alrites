@@ -14,9 +14,7 @@
     "gallery:seed": "node scripts/seed-gallery.mjs",
     "storage:migrate:r2": "node scripts/migrate-supabase-storage-to-r2.mjs",
     "r2:setup": "node scripts/setup-r2.mjs",
-    "assets:check": "wrangler deploy --dry-run --config cloudflare-assets/wrangler.jsonc",
-    "assets:deploy": "node scripts/setup-r2.mjs --apply",
-    "assets:publish": "node scripts/publish-assets-worker.mjs"
+    "assets:check": "wrangler deploy --dry-run --config cloudflare-assets/wrangler.jsonc"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
