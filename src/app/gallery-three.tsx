@@ -11,7 +11,7 @@ import {
   getVideoPreviewHref,
   openPreviewVideo,
 } from "./preview-navigation-bridge";
-import { openVideoRoom } from "./video-room";
+import { OPEN_ROOM_EVENT, openVideoRoom } from "./video-room";
 import { HERO_EYE_Y, SCREEN_Z } from "./scene-layout";
 import { VideoThumb } from "./video-thumb";
 
@@ -199,6 +199,10 @@ function GalleryVideoController({
       preferNative,
       onReady: (slug, video) => {
         if (playback.hoveredSlug !== slug) return;
+        if (activeVideo !== video) {
+          videoTexture?.dispose();
+          videoTexture = null;
+        }
         activeVideo = video;
         if (!videoTexture) {
           videoTexture = new THREE.VideoTexture(video);
@@ -210,6 +214,9 @@ function GalleryVideoController({
           playback.videoTexture = videoTexture;
         }
         playback.videoSlug = slug;
+      },
+      onUnavailable: (slug) => {
+        if (playback.hoveredSlug === slug) clearTexture();
       },
     });
 
@@ -231,27 +238,53 @@ function GalleryVideoController({
         clearTexture();
       }
     };
+    const onOpenRoom = () => {
+      playback.hoveredSlug = null;
+      pool.deactivate();
+      clearTexture();
+    };
 
     const observed = new Map<Element, string>();
     const observer = new IntersectionObserver(entries => {
       for (const entry of entries) {
         const slug = observed.get(entry.target);
-        if (slug) pool.setVisible(slug, entry.isIntersecting);
+        if (slug) {
+          if (!entry.isIntersecting && playback.hoveredSlug === slug) {
+            playback.hoveredSlug = null;
+            clearTexture();
+          }
+          pool.setVisible(slug, entry.isIntersecting);
+        }
       }
     }, { rootMargin: "25% 0px", threshold: 0.01 });
-    items.forEach((item, index) => {
-      if (!item.manifestUrl) return;
-      const element = document.querySelector(`[data-gallery-plane="${index}"]`);
-      if (element) {
-        observed.set(element, item.slug);
-        observer.observe(element);
-      }
+    // The R3F root can commit before GalleryGrid replaces its HTML thumbnails
+    // on a mobile-to-desktop resize. Observe that hand-off instead of assuming
+    // all targets exist during this effect's first run.
+    const observeElements = () => {
+      items.forEach((item, index) => {
+        if (!item.manifestUrl) return;
+        const element = document.querySelector(`[data-gallery-plane="${index}"]`);
+        if (element && !observed.has(element)) {
+          observed.set(element, item.slug);
+          observer.observe(element);
+        }
+      });
+      if (observed.size === videos.size) discovery.disconnect();
+    };
+    const discovery = new MutationObserver(observeElements);
+    discovery.observe(document.getElementById("portfolio-gallery") ?? document.body, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ["data-gallery-plane"],
     });
+    observeElements();
     window.addEventListener(GALLERY_HOVER_EVENT, onHover);
+    window.addEventListener(OPEN_ROOM_EVENT, onOpenRoom);
 
     return () => {
       observer.disconnect();
+      discovery.disconnect();
       window.removeEventListener(GALLERY_HOVER_EVENT, onHover);
+      window.removeEventListener(OPEN_ROOM_EVENT, onOpenRoom);
       playback.hoveredSlug = null;
       pool.dispose();
       clearTexture();
@@ -599,7 +632,11 @@ function GalleryPlane({
     const mesh = meshRef.current;
     const material = materialRef.current;
     const labelMaterial = labelMaterialRef.current;
-    const element = elementRef.current;
+    let element = elementRef.current;
+    if (!element?.isConnected) {
+      element = document.querySelector<HTMLElement>(`[data-gallery-plane="${index}"]`);
+      elementRef.current = element;
+    }
     if (!group || !mesh || !material || !labelMaterial || !element) return;
     const playback = playbackRef.current;
 

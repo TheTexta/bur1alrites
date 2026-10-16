@@ -4,14 +4,12 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import type { RenderMode } from "@/lib/browser-render-mode";
-import { attachHlsStream } from "@/lib/hls-stream";
+import { createViewportVideoPool } from "@/lib/viewport-video-pool";
 import { getVideoPreviewHref } from "./preview-navigation-bridge";
-import { openVideoRoom } from "./video-room";
+import { OPEN_ROOM_EVENT, openVideoRoom } from "./video-room";
 
 const ACTIVATE_PREVIEW_EVENT = "portfolio:activate-preview";
 const PRELOAD_MARGIN = "25% 0px";
-
-type StreamController = Awaited<ReturnType<typeof attachHlsStream>>;
 
 type VideoThumbProps = {
   slug: string;
@@ -36,195 +34,66 @@ export function VideoThumb({
 }: VideoThumbProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const activeRef = useRef(false);
-  const nearViewportRef = useRef(false);
-  const controllerRef = useRef<StreamController | null>(null);
-  const attachPromiseRef = useRef<Promise<StreamController> | null>(null);
-  const loadingRef = useRef(false);
+  const poolRef = useRef<ReturnType<typeof createViewportVideoPool> | null>(null);
   const [isActive, setIsActive] = useState(false);
   const [hasFirstFrame, setHasFirstFrame] = useState(false);
   const isWebKitSafe = renderMode === "webkit-safe";
 
   useEffect(() => {
-    function handlePreviewActivation(event: Event) {
-      const activeVideo = (event as CustomEvent<HTMLVideoElement>).detail;
-      const video = ref.current;
-
-      if (
-        !video ||
-        activeVideo === video ||
-        !activeRef.current
-      ) {
-        return;
-      }
-
-      video.pause();
-      video.currentTime = 0;
-      activeRef.current = false;
-      setIsActive(false);
-      setHasFirstFrame(false);
-
-      controllerRef.current?.stopLoading();
-      if (!nearViewportRef.current) {
-        attachPromiseRef.current = null;
-        controllerRef.current?.destroy();
-        controllerRef.current = null;
-      }
-    }
-
-    window.addEventListener(ACTIVATE_PREVIEW_EVENT, handlePreviewActivation);
-
-    return () => {
-      window.removeEventListener(ACTIVATE_PREVIEW_EVENT, handlePreviewActivation);
-      activeRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
     const video = ref.current;
     if (!video) return;
 
+    const pool = createViewportVideoPool(new Map([[slug, manifestUrl]]), {
+      preferNative: isWebKitSafe,
+      createVideo: () => video,
+      onReady: () => {
+        if (activeRef.current) setHasFirstFrame(true);
+      },
+      onUnavailable: () => setHasFirstFrame(false),
+    });
+    poolRef.current = pool;
+
+    function deactivate() {
+      activeRef.current = false;
+      setIsActive(false);
+      setHasFirstFrame(false);
+      pool.deactivate();
+    }
+
+    function handlePreviewActivation(event: Event) {
+      const activeVideo = (event as CustomEvent<HTMLVideoElement>).detail;
+      if (activeVideo !== video && activeRef.current) deactivate();
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
-        nearViewportRef.current = entry.isIntersecting;
-
-        if (entry.isIntersecting) {
-          video.preload = "auto";
-
-          if (!controllerRef.current && !attachPromiseRef.current) {
-            const request = attachHlsStream(video, manifestUrl, {
-              startLevel: 0,
-              preferNative: isWebKitSafe,
-              preview: true,
-            });
-            attachPromiseRef.current = request;
-
-            void request.then(
-              (controller) => {
-                if (attachPromiseRef.current === request) {
-                  controllerRef.current = controller;
-                  attachPromiseRef.current = null;
-                  if (!activeRef.current && video.readyState >= 2) controller.stopLoading();
-                } else {
-                  controller.destroy();
-                }
-              },
-              () => {
-                if (attachPromiseRef.current === request) {
-                  attachPromiseRef.current = null;
-                }
-              },
-            );
-          }
-
-          return;
-        }
-
-        video.preload = "none";
-
-        if (activeRef.current) {
-          activeRef.current = false;
-          video.pause();
-          video.currentTime = 0;
-          setIsActive(false);
-          setHasFirstFrame(false);
-        }
-        attachPromiseRef.current = null;
-        controllerRef.current?.destroy();
-        controllerRef.current = null;
-        video.removeAttribute("src");
-        video.load();
+        if (!entry.isIntersecting && activeRef.current) deactivate();
+        pool.setVisible(slug, entry.isIntersecting);
       },
       { rootMargin: PRELOAD_MARGIN, threshold: 0.01 },
     );
 
     observer.observe(video);
+    window.addEventListener(ACTIVATE_PREVIEW_EVENT, handlePreviewActivation);
+    window.addEventListener("blur", deactivate);
+    window.addEventListener(OPEN_ROOM_EVENT, deactivate);
 
     return () => {
-      nearViewportRef.current = false;
+      window.removeEventListener(ACTIVATE_PREVIEW_EVENT, handlePreviewActivation);
+      window.removeEventListener("blur", deactivate);
+      window.removeEventListener(OPEN_ROOM_EVENT, deactivate);
       observer.disconnect();
-      attachPromiseRef.current = null;
-      controllerRef.current?.destroy();
-      controllerRef.current = null;
-      video.preload = "none";
-      video.removeAttribute("src");
-      video.load();
+      activeRef.current = false;
+      poolRef.current = null;
+      pool.dispose();
     };
-  }, [isWebKitSafe, manifestUrl]);
-
-  async function playPreview() {
-    const video = ref.current;
-    if (!video || loadingRef.current) return;
-
-    loadingRef.current = true;
-    let request: Promise<StreamController> | null = null;
-
-    try {
-      if (!controllerRef.current) {
-        request = attachPromiseRef.current;
-
-        if (!request) {
-          request = attachHlsStream(video, manifestUrl, {
-            startLevel: 0,
-            preferNative: isWebKitSafe,
-            preview: true,
-          });
-          attachPromiseRef.current = request;
-        }
-
-        const controller = await request;
-
-        if (controllerRef.current !== controller && attachPromiseRef.current !== request) {
-          controller.destroy();
-          return;
-        }
-
-        if (!activeRef.current) {
-          if (nearViewportRef.current) {
-            controller.stopLoading();
-            controllerRef.current = controller;
-            if (attachPromiseRef.current === request) attachPromiseRef.current = null;
-          } else {
-            controller.destroy();
-          }
-          return;
-        }
-
-        controllerRef.current = controller;
-        if (attachPromiseRef.current === request) attachPromiseRef.current = null;
-      }
-
-      controllerRef.current?.startLoading();
-      await video.play();
-
-      if (isWebKitSafe && activeRef.current && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        setHasFirstFrame(true);
-      }
-    } catch {
-      if (request && attachPromiseRef.current === request) {
-        attachPromiseRef.current = null;
-      }
-      // The poster remains visible if a stream is not ready yet.
-    } finally {
-      loadingRef.current = false;
-    }
-  }
+  }, [isWebKitSafe, manifestUrl, slug]);
 
   function stopPreview() {
     activeRef.current = false;
+    setIsActive(false);
     setHasFirstFrame(false);
-
-    const video = ref.current;
-    if (video) {
-      video.pause();
-      video.currentTime = 0;
-    }
-
-    controllerRef.current?.stopLoading();
-    if (!nearViewportRef.current) {
-      attachPromiseRef.current = null;
-      controllerRef.current?.destroy();
-      controllerRef.current = null;
-    }
+    poolRef.current?.deactivate();
   }
 
   function activatePreview() {
@@ -239,11 +108,10 @@ export function VideoThumb({
     activeRef.current = true;
     setIsActive(true);
     setHasFirstFrame(false);
-    void playPreview();
+    poolRef.current?.activate(slug);
   }
 
   function deactivatePreview() {
-    setIsActive(false);
     stopPreview();
   }
 
@@ -289,23 +157,17 @@ export function VideoThumb({
           poster={posterUrl}
           aria-hidden="true"
           className="pointer-events-none block h-full w-full object-cover"
-          onLoadedData={() => {
-            if (isWebKitSafe && activeRef.current) setHasFirstFrame(true);
-            if (!activeRef.current) controllerRef.current?.stopLoading();
-          }}
         />
-        {isWebKitSafe ? (
-          <Image
-            src={posterUrl}
-            alt=""
-            aria-hidden="true"
-            width={width}
-            height={height}
-            sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
-            unoptimized
-            className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter] duration-150 group-focus-visible:grayscale-0 group-focus-visible:invert-0 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"} ${isActive && hasFirstFrame ? "opacity-0 transition-[filter,opacity]" : "opacity-100"}`}
-          />
-        ) : null}
+        <Image
+          src={posterUrl}
+          alt=""
+          aria-hidden="true"
+          width={width}
+          height={height}
+          sizes="(max-width: 767px) 100vw, (max-width: 991px) 50vw, (max-width: 1279px) 33vw, 25vw"
+          unoptimized
+          className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-[filter,opacity] duration-150 ${isWebKitSafe ? `group-focus-visible:grayscale-0 group-focus-visible:invert-0 ${isActive ? "grayscale-0 invert-0" : "grayscale invert"}` : ""} ${isActive && hasFirstFrame ? "opacity-0" : "opacity-100"}`}
+        />
       </span>
     </button>
   );

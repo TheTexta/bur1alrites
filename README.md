@@ -9,6 +9,16 @@ HLS.js previews use the lowest rendition and a short buffer, retaining a decoded
 first frame for immediate hover playback. Only the active preview uploads video
 frames to the 3D scene. Scrolling cards away releases their streams and video
 resources; HTML and mobile previews follow the same viewport loading policy.
+Both rendering paths share the same playback lifecycle: failed previews are
+discarded, active previews get at most two automatic retries (after 0.5s and
+1.5s), and eight seconds without playback progress triggers a fresh stream.
+Re-hovering or restoring connectivity can retry an unavailable preview. Leaving
+the viewport or hiding the tab cancels pending attachments and recovery work;
+posters remain visible until playback produces a frame. Browser autoplay denial
+does not trigger automatic retries. Opening the full video room deactivates the
+hover preview and cancels its recovery timers.
+The desktop scene discovers gallery targets after responsive layout hand-offs,
+including when the canvas commits before the HTML grid.
 
 ## Setup
 
@@ -104,8 +114,9 @@ server during transfer.
 
 MOV and MP4 files in `portfolio-images/` remain archival masters. Browsers request
 HLS manifests and segments. The hero starts at 540p and adapts to 720p/1080p.
-Gallery cards initially render resized poster textures; a shared HLS player
-attaches on hover and returns the card to its poster afterwards.
+Gallery cards initially render resized posters. Viewport-pooled preview players
+preload a first frame at the lowest rendition; only the active card plays and
+uploads frames to the scene. Cards return to their posters afterwards.
 
 The worker in `media-worker/` scans R2 every five minutes, streams sources to
 temporary disk, and encodes one source at a time with FFmpeg. Give it enough disk

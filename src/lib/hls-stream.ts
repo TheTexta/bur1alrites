@@ -9,29 +9,61 @@ type AttachHlsStreamOptions = {
   onFatalError?: () => void;
   preferNative?: boolean;
   preview?: boolean;
+  signal?: AbortSignal;
 };
 
 const HLS_MIME_TYPE = "application/vnd.apple.mpegurl";
+
+// Aborting an attachment must destroy it synchronously. A late promise cleanup may
+// otherwise detach a newer stream attached to the same HTML thumbnail element.
+function ownStream(controller: HlsStreamController, signal?: AbortSignal): HlsStreamController {
+  let destroyed = false;
+  const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    signal?.removeEventListener("abort", destroy);
+    controller.destroy();
+  };
+  signal?.addEventListener("abort", destroy, { once: true });
+  if (signal?.aborted) destroy();
+  return {
+    destroy,
+    startLoading: () => { if (!destroyed) controller.startLoading(); },
+    stopLoading: () => { if (!destroyed) controller.stopLoading(); },
+  };
+}
+
+function attachNativeStream(
+  video: HTMLVideoElement,
+  manifestUrl: string,
+  options: AttachHlsStreamOptions,
+) {
+  const onError = () => options.onFatalError?.();
+  video.addEventListener("error", onError);
+  video.src = manifestUrl;
+  return ownStream({
+    destroy: () => {
+      video.removeEventListener("error", onError);
+      video.removeAttribute("src");
+      video.load();
+    },
+    startLoading: () => {},
+    stopLoading: () => {},
+  }, options.signal);
+}
 
 export async function attachHlsStream(
   video: HTMLVideoElement,
   manifestUrl: string,
   options: AttachHlsStreamOptions = {},
 ): Promise<HlsStreamController> {
+  options.signal?.throwIfAborted();
   if (options.preferNative && video.canPlayType(HLS_MIME_TYPE)) {
-    video.src = manifestUrl;
-
-    return {
-      destroy: () => {
-        video.removeAttribute("src");
-        video.load();
-      },
-      startLoading: () => {},
-      stopLoading: () => {},
-    };
+    return attachNativeStream(video, manifestUrl, options);
   }
 
   const { default: Hls } = await import("hls.js");
+  options.signal?.throwIfAborted();
 
   if (Hls.isSupported()) {
     const player = new Hls({
@@ -51,24 +83,15 @@ export async function attachHlsStream(
     player.loadSource(manifestUrl);
     player.attachMedia(video);
 
-    return {
+    return ownStream({
       destroy: () => player.destroy(),
       startLoading: () => player.startLoad(),
       stopLoading: () => player.stopLoad(),
-    };
+    }, options.signal);
   }
 
   if (video.canPlayType(HLS_MIME_TYPE)) {
-    video.src = manifestUrl;
-
-    return {
-      destroy: () => {
-        video.removeAttribute("src");
-        video.load();
-      },
-      startLoading: () => {},
-      stopLoading: () => {},
-    };
+    return attachNativeStream(video, manifestUrl, options);
   }
 
   throw new Error("This browser cannot play HLS video.");
