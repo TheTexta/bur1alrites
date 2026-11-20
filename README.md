@@ -19,6 +19,11 @@ does not trigger automatic retries. Opening the full video room deactivates the
 hover preview and cancels its recovery timers.
 The desktop scene discovers gallery targets after responsive layout hand-offs,
 including when the canvas commits before the HTML grid.
+`gallery-targets.ts` owns gallery-local slug registration and responsive target
+handoffs; HTML callback refs supply targets to scene layout and visibility without
+DOM discovery. The viewport video pool still owns the one-active-preview lifecycle.
+`room-session.ts` owns each video room's keys, look and walk pose across internal
+rig remounts, and releases its pointer lock and shared visibility on owner teardown.
 
 ## Setup
 
@@ -123,6 +128,10 @@ temporary disk, and encodes one source at a time with FFmpeg. Give it enough dis
 for a source plus its outputs. Versioned HLS outputs are immutable for one year.
 Stable master manifests and posters use `no-cache`. Segments are published before
 the poster and stable master manifest; database status updates remain in Supabase.
+`media-worker/worker.mjs` owns executable startup, configuration and real IO.
+Its import-safe `process-source.mjs` operation owns fingerprint reuse, variant
+selection, publication ordering, status and temporary-directory cleanup, with
+injected IO/encoder effects for offline tests (no FFmpeg, credentials or network).
 
 Deploy `media-worker/Dockerfile` as a separate Coolify Compose resource with no
 inbound port, using `media-worker/.env.example` for its environment. The existing
@@ -171,6 +180,9 @@ Do not delete source objects until the retention period is
 over. New R2 uploads must be reconciled separately before rolling back storage.
 
 ## Validation
+
+The suite also discovers `media-worker/process-source.test.mjs` and deterministic
+room-session/gallery-target tests using fake browser events and layout targets.
 
 ```bash
 npm test

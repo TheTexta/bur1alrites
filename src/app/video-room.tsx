@@ -7,6 +7,7 @@ import { EffectPass, type EffectComposer as EffectComposerImpl } from "postproce
 import * as THREE from "three";
 
 import type { GallerySceneItem } from "./gallery-three";
+import { createRoomSession, type RoomSession } from "./room-session";
 
 import {
   setVideoRoomOpen,
@@ -17,8 +18,6 @@ import {
 import { useSceneFrameRecorder, useSceneQuality } from "./scene-quality";
 import { MirrorFloor, RoomShell, ScreenPanel } from "./room";
 import {
-  FLOOR_SIZE,
-  FLOOR_Y,
   MOBILE_FOV_INCREASE,
   SCREEN_Z,
   getScreenLayout,
@@ -48,123 +47,18 @@ const PARALLAX_EASE = 0.06;
 // Duration of the fade-to-black crossfade when opening/closing the room, in ms - must match the
 // transition-duration class applied to the dialog below.
 const FADE_MS = 500;
-const LOOK_SENSITIVITY = 0.0022;
-const MAX_PITCH = 1.4;
-const WALK_EYE_HEIGHT = 5;
-const WALK_SPEED = 16;
-// Keeps the walker from passing through the screen or wandering off the mirror.
-const MIN_SCREEN_DISTANCE = 1;
-const MAX_SCREEN_DISTANCE = 72;
-const WALK_BOUND_X = FLOOR_SIZE / 2 - 14;
-const WALK_KEYS: Record<string, "forward" | "back" | "left" | "right"> = {
-  KeyW: "forward",
-  ArrowUp: "forward",
-  KeyS: "back",
-  ArrowDown: "back",
-  KeyA: "left",
-  ArrowLeft: "left",
-  KeyD: "right",
-  ArrowRight: "right",
-};
-
-// Module-level so the key state survives any remount of the rig mid-walk.
-const walkState = { forward: false, back: false, left: false, right: false };
-const lookState = { yaw: 0, pitch: 0, locked: false, recentering: false };
-const walkPosition = new THREE.Vector3();
 // Eases the camera back to the parallax orientation after escaping walk mode; faster than PARALLAX_EASE so it settles quickly without snapping.
 const RECENTER_EASE = 0.12;
 const RECENTER_DONE_ANGLE = 0.002;
 
-function useWalkKeys(enabled = true) {
-  useEffect(() => {
-    if (!enabled) return;
-
-    const setKey = (code: string, pressed: boolean) => {
-      const action = WALK_KEYS[code];
-      if (action) walkState[action] = pressed;
-    };
-    const onDown = (event: KeyboardEvent) => setKey(event.code, true);
-    const onUp = (event: KeyboardEvent) => setKey(event.code, false);
-    const reset = () => {
-      walkState.forward = false;
-      walkState.back = false;
-      walkState.left = false;
-      walkState.right = false;
-    };
-
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-    window.addEventListener("blur", reset);
-
-    return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
-      window.removeEventListener("blur", reset);
-      reset();
-    };
-  }, [enabled]);
-}
-
-// Clicking the canvas captures the cursor; mouse movement then aims the walker.
-function useMouseLook(
-  domElement: HTMLCanvasElement,
-  camera: THREE.PerspectiveCamera,
-  enabled = true,
-) {
-  useEffect(() => {
-    if (!enabled) return;
-
-    const onClick = () => {
-      if (document.pointerLockElement === domElement) return;
-      // Chrome returns a promise that rejects when the gesture or document is ineligible.
-      Promise.resolve(domElement.requestPointerLock() as unknown).catch(() => {});
-    };
-
-    const onMove = (event: MouseEvent) => {
-      if (document.pointerLockElement !== domElement) return;
-      lookState.yaw -= event.movementX * LOOK_SENSITIVITY;
-      lookState.pitch = THREE.MathUtils.clamp(
-        lookState.pitch - event.movementY * LOOK_SENSITIVITY,
-        -MAX_PITCH,
-        MAX_PITCH,
-      );
-    };
-
-    const onLockChange = () => {
-      const locked = document.pointerLockElement === domElement;
-      lookState.locked = locked;
-      if (!locked) {
-        // Walk mode leaves the camera off-center; ease it back instead of snapping to the parallax pose.
-        lookState.recentering = true;
-        return;
-      }
-
-      // Continue from wherever the framed camera was, so taking control never jumps the view.
-      walkPosition.copy(camera.position);
-      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
-      lookState.yaw = euler.y;
-      lookState.pitch = euler.x;
-    };
-
-    domElement.addEventListener("click", onClick);
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("pointerlockchange", onLockChange);
-
-    return () => {
-      domElement.removeEventListener("click", onClick);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("pointerlockchange", onLockChange);
-      lookState.locked = false;
-    };
-  }, [domElement, camera, enabled]);
-}
-
 function RoomRig({
   layout,
   pointerParallax,
+  sessionRef,
 }: {
   layout: ScreenLayout;
   pointerParallax: boolean;
+  sessionRef: React.RefObject<RoomSession | null>;
 }) {
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
   const size = useThree((state) => state.size);
@@ -172,14 +66,12 @@ function RoomRig({
   const pointer = usePointerPosition(pointerParallax);
   const target = useMemo(() => new THREE.Vector3(), []);
   const lookAt = useMemo(() => new THREE.Vector3(), []);
-  const heading = useMemo(() => new THREE.Vector3(), []);
-  const strafe = useMemo(() => new THREE.Vector3(), []);
-  const motion = useMemo(() => new THREE.Vector3(), []);
   // Must be a camera: Object3D.lookAt aims +Z at the target, cameras look down -Z. Only used while recentering.
   const framer = useMemo(() => new THREE.Camera(), []);
 
-  useWalkKeys(pointerParallax);
-  useMouseLook(domElement, camera, pointerParallax);
+  useEffect(() => {
+    if (pointerParallax) return sessionRef.current?.bind(domElement, camera);
+  }, [sessionRef, domElement, camera, pointerParallax]);
 
   // Pull back far enough that the whole screen fits whichever axis is the tighter constraint.
   const distance = useMemo(() => {
@@ -191,31 +83,11 @@ function RoomRig({
   }, [camera.fov, size.width, size.height, layout.width, layout.height]);
 
   useFrame((_, delta) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const { look: lookState } = session;
     // r3f's documented pattern: mutate three.js objects in useFrame instead of setState.
-    if (lookState.locked) {
-      const { yaw, pitch } = lookState;
-      heading.set(-Math.sin(yaw), 0, -Math.cos(yaw));
-      strafe.set(Math.cos(yaw), 0, -Math.sin(yaw));
-      motion.set(0, 0, 0);
-
-      if (walkState.forward) motion.add(heading);
-      if (walkState.back) motion.sub(heading);
-      if (walkState.right) motion.add(strafe);
-      if (walkState.left) motion.sub(strafe);
-      if (motion.lengthSq() > 0) walkPosition.addScaledVector(motion.normalize(), WALK_SPEED * delta);
-
-      walkPosition.x = THREE.MathUtils.clamp(walkPosition.x, -WALK_BOUND_X, WALK_BOUND_X);
-      walkPosition.z = THREE.MathUtils.clamp(
-        walkPosition.z,
-        SCREEN_Z + MIN_SCREEN_DISTANCE,
-        SCREEN_Z + MAX_SCREEN_DISTANCE,
-      );
-      walkPosition.y = FLOOR_Y + WALK_EYE_HEIGHT;
-
-      camera.position.copy(walkPosition);
-      camera.rotation.set(pitch, yaw, 0, "YXZ");
-      return;
-    }
+    if (session.walk(camera, delta)) return;
 
     // Camera drifts opposite the pointer and re-aims every frame off the eased position,
     // same as the hero scene, so rotation never lags behind the drift with a second ease.
@@ -233,7 +105,7 @@ function RoomRig({
       framer.lookAt(lookAt);
       camera.quaternion.slerp(framer.quaternion, RECENTER_EASE);
       if (camera.quaternion.angleTo(framer.quaternion) < RECENTER_DONE_ANGLE) {
-        lookState.recentering = false;
+        session.finishRecentering();
       }
     } else {
       camera.lookAt(lookAt);
@@ -244,6 +116,7 @@ function RoomRig({
 }
 
 function RoomScene({
+  sessionRef,
   video,
   mirrorResolutionScale,
   wideBloomLevels,
@@ -252,6 +125,7 @@ function RoomScene({
   recordFrameSample,
   isMobile,
 }: {
+  sessionRef: React.RefObject<RoomSession | null>;
   video: RoomVideo;
   mirrorResolutionScale: number;
   wideBloomLevels: number | null;
@@ -285,7 +159,7 @@ function RoomScene({
 
   return (
     <>
-      <RoomRig layout={layout} pointerParallax={!isMobile} />
+      <RoomRig sessionRef={sessionRef} layout={layout} pointerParallax={!isMobile} />
       <MirrorFloor resolutionScale={mirrorResolutionScale} />
       <RoomShell />
       <ScreenPanel
@@ -326,6 +200,8 @@ export function VideoRoom({
   const recordFrameSample = useSceneFrameRecorder();
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRef = useRef<RoomSession | null>(null);
+  if (sessionRef.current === null) sessionRef.current = createRoomSession(setVideoRoomOpen);
 
   const close = useCallback(() => {
     setVisible(false);
@@ -333,15 +209,17 @@ export function VideoRoom({
     closeTimeoutRef.current = setTimeout(() => setVideo(null), FADE_MS);
   }, []);
 
+  useEffect(() => sessionRef.current?.connect({ window, document }, setWalking), []);
+
   useEffect(() => {
-    const onLockChange = () => setWalking(!!document.pointerLockElement);
-    document.addEventListener("pointerlockchange", onLockChange);
-    return () => document.removeEventListener("pointerlockchange", onLockChange);
-  }, []);
+    if (mobileView || !enabled) sessionRef.current?.releaseControls();
+  }, [mobileView, enabled]);
 
   // The hero scene sits fully behind this dialog once it's open, so pause its render loop too.
   useEffect(() => {
-    setVideoRoomOpen(video !== null);
+    const session = sessionRef.current;
+    if (video) session?.open();
+    return () => session?.close();
   }, [video]);
 
   useEffect(() => {
@@ -379,8 +257,12 @@ export function VideoRoom({
     return () => cancelAnimationFrame(id);
   }, [video]);
 
-  useEffect(() => () => {
-    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+  useEffect(() => {
+    const session = sessionRef.current;
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+      session?.dispose();
+    };
   }, []);
 
   useEffect(() => {
@@ -432,6 +314,7 @@ export function VideoRoom({
           aria-hidden="true"
         >
           <RoomScene
+            sessionRef={sessionRef}
             video={video}
             mirrorResolutionScale={quality.mirrorResolutionScale}
             wideBloomLevels={quality.wideBloomLevels}

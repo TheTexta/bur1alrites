@@ -9,6 +9,7 @@ import * as THREE from "three";
 
 import { measureSections, observedSections } from "./hero-wordmark-motion";
 import { GalleryInScene, type GallerySceneItem } from "./gallery-three";
+import { useGalleryTargets } from "./gallery-target-provider";
 import { MirrorFloor, RoomShell, SCREEN_DISPLACEMENT, ScreenPanel } from "./room";
 import {
   FLOOR_Y,
@@ -390,6 +391,7 @@ export function HeroScene({
   preferNativeHls,
   isMobile,
 }: HeroSceneProps) {
+  const galleryTargets = useGalleryTargets();
   const geometryRef = useWordmarkGeometry();
   const displacementProgressRef = useRef(DISPLACEMENT_START);
   const enabled = useRenderingEnabled();
@@ -447,7 +449,7 @@ export function HeroScene({
             playing={!roomOpen}
           />
           {!mobileView ? (
-            <GalleryInScene items={galleryItems} preferNative={preferNativeHls} />
+            <GalleryInScene registry={galleryTargets} items={galleryItems} preferNative={preferNativeHls} />
           ) : null}
           <Suspense fallback={null}>
             <FloorLogo />

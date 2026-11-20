@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -14,6 +14,8 @@ import {
 import { OPEN_ROOM_EVENT, openVideoRoom } from "./video-room";
 import { HERO_EYE_Y, SCREEN_Z } from "./scene-layout";
 import { VideoThumb } from "./video-thumb";
+import { useGalleryTargets } from "./gallery-target-provider";
+import { observeGalleryTargets, type GalleryTargetRegistry } from "./gallery-targets";
 
 const GALLERY_HOVER_EVENT = "portfolio:gallery-hover";
 // Fixed in the room just in front of the screen's maximum displacement. Unlike a billboard tied
@@ -37,6 +39,7 @@ export type GallerySceneItem = {
 };
 
 type GalleryHoverDetail = {
+  registry: GalleryTargetRegistry;
   slug: string;
   active: boolean;
 };
@@ -50,10 +53,10 @@ type GalleryPlayback = {
 
 type GalleryTargets = Map<string, THREE.Mesh>;
 
-function setGalleryHover(slug: string, active: boolean) {
+function setGalleryHover(registry: GalleryTargetRegistry, slug: string, active: boolean) {
   window.dispatchEvent(
     new CustomEvent<GalleryHoverDetail>(GALLERY_HOVER_EVENT, {
-      detail: { slug, active },
+      detail: { registry, slug, active },
     }),
   );
 }
@@ -87,6 +90,10 @@ export function GalleryMediaSlot({
   playInFrameOnTap: boolean;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const registry = useGalleryTargets();
+  const registerTarget = useCallback((element: HTMLElement | null) => {
+    if (element) return registry.register(item.slug, element);
+  }, [registry, item.slug]);
   const label = `${item.title}, ${item.client}, ${item.type}, ${item.year}`;
   const style = { aspectRatio: `${item.width} / ${item.height}` };
 
@@ -129,9 +136,14 @@ export function GalleryMediaSlot({
   }
 
   const interactionProps = {
+    ref: registerTarget,
     "data-gallery-plane": index,
-    onFocus: () => setGalleryHover(item.slug, true),
-    onBlur: () => setGalleryHover(item.slug, false),
+    onFocus: (event: React.FocusEvent<HTMLElement>) => {
+      if (registry.get(item.slug) === event.currentTarget) setGalleryHover(registry, item.slug, true);
+    },
+    onBlur: (event: React.FocusEvent<HTMLElement>) => {
+      if (registry.get(item.slug) === event.currentTarget) setGalleryHover(registry, item.slug, false);
+    },
     style,
   };
 
@@ -143,7 +155,7 @@ export function GalleryMediaSlot({
         data-preview-href={getVideoPreviewHref(item.slug)}
         aria-label={`Open ${label}`}
         onClick={() => {
-          setGalleryHover(item.slug, false);
+          setGalleryHover(registry, item.slug, false);
           openVideoRoom({
             manifestUrl: item.manifestUrl!,
             posterUrl: item.previewUrl,
@@ -168,10 +180,12 @@ export function GalleryMediaSlot({
 }
 
 function GalleryVideoController({
+  registry,
   items,
   playbackRef,
   preferNative,
 }: {
+  registry: GalleryTargetRegistry;
   items: GallerySceneItem[];
   playbackRef: React.RefObject<GalleryPlayback>;
   preferNative: boolean;
@@ -221,6 +235,7 @@ function GalleryVideoController({
     });
 
     const activate = (slug: string) => {
+      if (!videos.has(slug) || !registry.get(slug)) return;
       if (playback.hoveredSlug === slug && activeVideo) return;
       pool.deactivate();
       clearTexture();
@@ -230,7 +245,8 @@ function GalleryVideoController({
     };
 
     const onHover = (event: Event) => {
-      const { slug, active } = (event as CustomEvent<GalleryHoverDetail>).detail;
+      const { registry: sourceRegistry, slug, active } = (event as CustomEvent<GalleryHoverDetail>).detail;
+      if (sourceRegistry !== registry) return;
       if (active) activate(slug);
       else if (playback.hoveredSlug === slug) {
         playback.hoveredSlug = null;
@@ -244,60 +260,41 @@ function GalleryVideoController({
       clearTexture();
     };
 
-    const observed = new Map<Element, string>();
-    const observer = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        const slug = observed.get(entry.target);
-        if (slug) {
-          if (!entry.isIntersecting && playback.hoveredSlug === slug) {
-            playback.hoveredSlug = null;
-            clearTexture();
-          }
-          pool.setVisible(slug, entry.isIntersecting);
+    const stopObserving = observeGalleryTargets(
+      registry,
+      new Set(videos.keys()),
+      callback => new IntersectionObserver(callback, { rootMargin: "25% 0px", threshold: 0.01 }),
+      (slug, visible) => {
+        if (!visible && playback.hoveredSlug === slug) {
+          playback.hoveredSlug = null;
+          pool.deactivate(slug);
+          clearTexture();
         }
-      }
-    }, { rootMargin: "25% 0px", threshold: 0.01 });
-    // The R3F root can commit before GalleryGrid replaces its HTML thumbnails
-    // on a mobile-to-desktop resize. Observe that hand-off instead of assuming
-    // all targets exist during this effect's first run.
-    const observeElements = () => {
-      items.forEach((item, index) => {
-        if (!item.manifestUrl) return;
-        const element = document.querySelector(`[data-gallery-plane="${index}"]`);
-        if (element && !observed.has(element)) {
-          observed.set(element, item.slug);
-          observer.observe(element);
-        }
-      });
-      if (observed.size === videos.size) discovery.disconnect();
-    };
-    const discovery = new MutationObserver(observeElements);
-    discovery.observe(document.getElementById("portfolio-gallery") ?? document.body, {
-      childList: true, subtree: true, attributes: true,
-      attributeFilter: ["data-gallery-plane"],
-    });
-    observeElements();
+        pool.setVisible(slug, visible);
+      },
+    );
     window.addEventListener(GALLERY_HOVER_EVENT, onHover);
     window.addEventListener(OPEN_ROOM_EVENT, onOpenRoom);
 
     return () => {
-      observer.disconnect();
-      discovery.disconnect();
+      stopObserving();
       window.removeEventListener(GALLERY_HOVER_EVENT, onHover);
       window.removeEventListener(OPEN_ROOM_EVENT, onOpenRoom);
       playback.hoveredSlug = null;
       pool.dispose();
       clearTexture();
     };
-  }, [items, playbackRef, preferNative]);
+  }, [items, playbackRef, preferNative, registry]);
 
   return null;
 }
 
 function GalleryPointerController({
+  registry,
   items,
   targetsRef,
 }: {
+  registry: GalleryTargetRegistry;
   items: GallerySceneItem[];
   targetsRef: React.RefObject<GalleryTargets>;
 }) {
@@ -342,8 +339,8 @@ function GalleryPointerController({
     const previousSlug = hoveredSlugRef.current;
     if (previousSlug === nextSlug) return;
 
-    if (previousSlug) setGalleryHover(previousSlug, false);
-    if (nextSlug) setGalleryHover(nextSlug, true);
+    if (previousSlug) setGalleryHover(registry, previousSlug, false);
+    if (nextSlug) setGalleryHover(registry, nextSlug, true);
     hoveredSlugRef.current = nextSlug;
     document.documentElement.style.cursor = item?.manifestUrl ? "pointer" : "";
   };
@@ -503,14 +500,14 @@ function createLabelTexture(item: GallerySceneItem, width: number, height: numbe
 
 function GalleryPlane({
   item,
-  index,
+  registry,
   geometry,
   loader,
   playbackRef,
   targetsRef,
 }: {
   item: GallerySceneItem;
-  index: number;
+  registry: GalleryTargetRegistry;
   geometry: THREE.PlaneGeometry;
   loader: THREE.TextureLoader;
   playbackRef: React.RefObject<GalleryPlayback>;
@@ -520,7 +517,6 @@ function GalleryPlane({
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const labelMaterialRef = useRef<THREE.ShaderMaterial>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
   const posterRef = useRef<THREE.Texture | null>(null);
   const labelRef = useRef<THREE.CanvasTexture | null>(null);
   const labelSizeRef = useRef({ width: 0, height: 0 });
@@ -546,22 +542,19 @@ function GalleryPlane({
   );
 
   useEffect(() => {
-    elementRef.current = document.querySelector<HTMLElement>(
-      `[data-gallery-plane="${index}"]`,
-    );
     const targets = targetsRef.current;
     const mesh = meshRef.current;
     if (mesh) targets.set(item.slug, mesh);
 
     return () => {
-      targets.delete(item.slug);
+      if (targets.get(item.slug) === mesh) targets.delete(item.slug);
       loadVersionRef.current += 1;
       posterRef.current?.dispose();
       posterRef.current = null;
       labelRef.current?.dispose();
       labelRef.current = null;
     };
-  }, [index, item.slug, targetsRef]);
+  }, [item.slug, targetsRef]);
 
   const releasePoster = () => {
     loadVersionRef.current += 1;
@@ -632,11 +625,8 @@ function GalleryPlane({
     const mesh = meshRef.current;
     const material = materialRef.current;
     const labelMaterial = labelMaterialRef.current;
-    let element = elementRef.current;
-    if (!element?.isConnected) {
-      element = document.querySelector<HTMLElement>(`[data-gallery-plane="${index}"]`);
-      elementRef.current = element;
-    }
+    const element = registry.get(item.slug);
+    if (group && !element) group.visible = false;
     if (!group || !mesh || !material || !labelMaterial || !element) return;
     const playback = playbackRef.current;
 
@@ -739,9 +729,11 @@ function GalleryPlane({
 }
 
 export function GalleryInScene({
+  registry,
   items,
   preferNative,
 }: {
+  registry: GalleryTargetRegistry;
   items: GallerySceneItem[];
   preferNative: boolean;
 }) {
@@ -764,22 +756,23 @@ export function GalleryInScene({
   return (
     <>
       <GalleryVideoController
+        registry={registry}
         items={items}
         playbackRef={playbackRef}
         preferNative={preferNative}
       />
-      {items.map((item, index) => (
+      {items.map((item) => (
         <GalleryPlane
           key={item.slug}
           item={item}
-          index={index}
+          registry={registry}
           geometry={geometry}
           loader={loader}
           playbackRef={playbackRef}
           targetsRef={targetsRef}
         />
       ))}
-      <GalleryPointerController items={items} targetsRef={targetsRef} />
+      <GalleryPointerController registry={registry} items={items} targetsRef={targetsRef} />
     </>
   );
 }

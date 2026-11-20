@@ -8,6 +8,6 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY worker.mjs r2.mjs ./
+COPY worker.mjs r2.mjs process-source.mjs ./
 
 CMD ["node", "worker.mjs"]

@@ -15,6 +15,7 @@ import { ContactLinks } from "./contact-links";
 import { HeroScene } from "./hero-scene";
 import type { GallerySceneItem } from "./gallery-three";
 import { GalleryGrid } from "./gallery-grid";
+import { GalleryTargetProvider } from "./gallery-target-provider";
 import { PageRestoreBoundary } from "./page-restore-boundary";
 import { PreviewNavigationBridge } from "./preview-navigation-bridge";
 import { VideoRoom } from "./video-room";
@@ -92,6 +93,7 @@ export default async function StorageTestPage() {
 
   return (
     <SceneQualityProvider initialLevel={initialSceneQuality}>
+      <GalleryTargetProvider>
       <PreviewNavigationBridge />
       <PageRestoreBoundary>
         <section
@@ -134,6 +136,7 @@ export default async function StorageTestPage() {
           items={sceneMedia}
         />
       </PageRestoreBoundary>
+      </GalleryTargetProvider>
     </SceneQualityProvider>
   );
 }
