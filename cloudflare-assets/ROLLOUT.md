@@ -1,14 +1,14 @@
 # R2 rollout status — 2026-10-01
 
-Historical record: this branch prepares the retirement of this application's
-Worker publisher. Merge it only **after** a separately verified handoff of
-production `dextery-assets` publishing to the private
-`TheTexta/dextery-infrastructure` repository. The old Worker source/config is
-retained for rollback, but the branch removes its application deploy scripts.
-The commands below describe the original October 1 rollout, not the new publish
-path. Do not run a direct Wrangler deploy from this checkout.
+Historical record of the October 1 rollout and subsequent preview follow-up,
+not a current production inventory. This repository now retains Worker
+source/config for rollback without application deploy scripts. Production
+`dextery-assets` publishing belongs only to the private
+`TheTexta/dextery-infrastructure` repository after its separately verified
+ownership handoff. The former commands described below are historical, not the
+current publish path. Do not run a direct Wrangler deploy from this checkout.
 
-Production cutover is complete for both sites:
+The October 1 record reported completed cutover for both sites:
 
 | Project | Site | Images | Media |
 | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ Production cutover is complete for both sites:
   routes or inspect DNS records. Worker code updates then used the **former**
   `npm run assets:publish` script to upload and deploy a version while preserving
   dashboard-managed routes. The **former** `assets:deploy` path needed the
-  documented zone permissions. The ownership-handoff branch removes both
+  documented zone permissions. The ownership-handoff change removed both
   commands; future Worker publishing belongs only to dextery-infrastructure.
   No unrelated DNS records were changed during the historical cutover.
 - Both Vercel applications have their namespaced production environment values
@@ -110,4 +110,5 @@ Previous production deployments were
 Before restoring Supabase storage delivery, reconcile any new R2 uploads into
 retained source storage. Restore prior application environment/deployments and
 prior worker configuration; then remove the two legacy-upload pause policies
-using the SQL in the root README. Do not delete originals during retention.
+using the [rollback procedure](../docs/storage.md#rollback). Do not delete
+originals during retention.

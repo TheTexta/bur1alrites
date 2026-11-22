@@ -1,192 +1,70 @@
 # bur1alrites
 
-A Next.js portfolio with Supabase Auth and Postgres, and media stored in
-Cloudflare R2. Gallery videos have direct links at `/?video=<slug>`. Embedded
-public links report their destinations to the parent portfolio at `dextery.dev`.
+A video portfolio built with Next.js, React and Three.js. Supabase provides
+authentication and gallery metadata; Cloudflare R2 stores media.
 
-Gallery cards preload paused video previews in and just outside the viewport.
-HLS.js previews use the lowest rendition and a short buffer, retaining a decoded
-first frame for immediate hover playback. Only the active preview uploads video
-frames to the 3D scene. Scrolling cards away releases their streams and video
-resources; HTML and mobile previews follow the same viewport loading policy.
-Both rendering paths share the same playback lifecycle: failed previews are
-discarded, active previews get at most two automatic retries (after 0.5s and
-1.5s), and eight seconds without playback progress triggers a fresh stream.
-Re-hovering or restoring connectivity can retry an unavailable preview. Leaving
-the viewport or hiding the tab cancels pending attachments and recovery work;
-posters remain visible until playback produces a frame. Browser autoplay denial
-does not trigger automatic retries. Opening the full video room deactivates the
-hover preview and cancels its recovery timers.
-The desktop scene discovers gallery targets after responsive layout hand-offs,
-including when the canvas commits before the HTML grid.
-`gallery-targets.ts` owns gallery-local slug registration and responsive target
-handoffs; HTML callback refs supply targets to scene layout and visibility without
-DOM discovery. The viewport video pool still owns the one-active-preview lifecycle.
-`room-session.ts` owns each video room's keys, look and walk pose across internal
-rig remounts, and releases its pointer lock and shared visibility on owner teardown.
+- Responsive gallery with viewport-loaded hover previews and adaptive HLS playback.
+- Full video rooms with direct links at `/?video=<slug>`.
+- An authenticated editor for uploads, metadata, ordering and archive visibility.
+- A navigation bridge for previews embedded in the parent portfolio at `dextery.dev`.
 
-## Setup
+## Requirements
 
-Use Node.js 22 or later. Install dependencies, copy `.env.example` to
-`.env.local`, fill in the credentials, and run `npm run dev`.
+- Node.js 22 or later and npm.
+- A configured Supabase Auth/Postgres project, R2 bucket and HTTPS media delivery.
+- FFmpeg is required only for the separate [media worker](media-worker/README.md).
 
-Supabase credentials must refer to the same project. The anon key is public;
-`SUPABASE_SERVICE_ROLE_KEY` and the Cloudflare access ID and secret stay on the
-server. The application uses `CLOUDFLARE_R2_BUCKET=bur1alrites`. The API token
-and account ID are needed only by the provisioning script.
+## Local development
 
-## Shared asset delivery
-
-The Worker in `cloudflare-assets/` serves two published buckets:
-
-| Project | Images | Media |
-| --- | --- | --- |
-| bur1alrites | `https://images.dextery.dev/bur1alrites` | `https://media.dextery.dev/bur1alrites` |
-| elliotmairet | `https://images.dextery.dev/elliotmairet` | `https://media.dextery.dev/elliotmairet` |
-
-Prefixes select the bucket and are removed before lookup. Existing keys remain
-unchanged. The private Elliot staging bucket is never bound, and bur1alrites
-`portfolio-images/incoming/` uploads are excluded from public delivery.
-
-`media.dextery.dev` is a Worker custom domain. The image domain keeps its existing
-Elliot bucket attachment; only the two project prefix routes invoke this Worker.
-Legacy Elliot `/uploads/...` and `/cdn-cgi/image/...` URLs keep working. Do not
-replace the image domain's bucket attachment.
-
-Image originals support GET, HEAD, validators, and byte ranges. Resized images
-use `width`, `quality`, and `format=auto` query parameters. The Cloudflare loader
-and Three.js textures share these URLs; Next.js does not optimize them again.
-The Worker validates sizes and formats and fetches an ETag-versioned source
-through the media hostname using Cloudflare's `cf.image` transformation API.
+Run from the repository root:
 
 ```bash
-npm run r2:setup                    # Inspect the bucket without writing
-npm run r2:setup -- --apply          # Configure this site's bucket and upload CORS only
-npm run assets:check                # Compile the retained Worker snapshot without deploying
+npm ci
+cp .env.example .env.local
 ```
 
-The shared `dextery-assets` Worker is published only from the private
-`TheTexta/dextery-infrastructure` repository after its separately verified
-ownership handoff. This site's setup script now manages only the bur1alrites
-bucket and its upload CORS; it cannot deploy routes or Worker versions.
-`--bucket-only` remains accepted for compatibility with older setup commands.
-Its bucket/CORS operations require an R2-capable token, while Worker publishing
-has separate permissions and an approval gate in the infrastructure repo.
-Retaining a Wrangler dry-run and historical Worker config does not authorize
-running `wrangler deploy` directly from this application checkout.
-Upload CORS includes the configured `NEXT_PUBLIC_SITE_URL` and local development
-origins; configure the production origin before provisioning.
-
-## Admin gallery
-
-Apply SQL files in `supabase/migrations/` in filename order. In particular,
-`202610010001_r2_upload_reservations.sql` creates the service-role-only reservation
-RPC used to make multipart completion safe to retry. Existing Supabase Storage
-policies remain during rollback retention. The next migration adds restrictive
-INSERT/UPDATE policies for authenticated clients on the old bur1alrites bucket,
-pausing legacy browser uploads during reconciliation. Other buckets and reads
-remain available; new uploads use R2.
-
-Sign in at `/admin` with a confirmed Supabase email/password account. Grant access
-with `npm run admin:access -- <email> grant`; use `revoke` to remove it. The API
-requires the user's `app_metadata.bur1alrites_admin` claim and checks request
-origins.
-
-The application uses its server-side Supabase service role for the
-`create_gallery_item` and `move_gallery_item` RPCs after checking admin access.
-Both RPCs are `SECURITY DEFINER` and must not be executable by `anon` or
-`authenticated` directly. Apply the append-only
-`20261014213549_restrict_gallery_rpc_execution.sql` migration to an existing
-installation as its function owner (`supabase_admin`) or a role authorized to
-change its grants. The migration asserts the effective grants and keeps
-service-role execution available. Do not call these mutating RPCs merely to test
-permissions.
-
-The browser uploads MOV or MP4 files up to 5 GiB directly to R2 using 32 MiB
-multipart chunks and at most three concurrent transfers. Failed parts use fresh
-signed URLs and bounded retries. Keep the page open until completion; upload
-sessions are not restored after a reload. Finalization can be retried on the same
-page without sending the source again. The API initializes uploads with POST,
-signs parts with PATCH, completes and queues clips with PUT, and aborts with
-DELETE. Sessions bind the object, multipart ID, metadata, size, and expiry.
-
-Completed abandoned staging objects are cleaned after 48 hours by the HLS
-worker. R2's automatic multipart expiry handles incomplete abandoned transfers.
-Sources and service credentials never pass through the browser application
-server during transfer.
-
-## Adaptive video delivery
-
-MOV and MP4 files in `portfolio-images/` remain archival masters. Browsers request
-HLS manifests and segments. The hero starts at 540p and adapts to 720p/1080p.
-Gallery cards initially render resized posters. Viewport-pooled preview players
-preload a first frame at the lowest rendition; only the active card plays and
-uploads frames to the scene. Cards return to their posters afterwards.
-
-The worker in `media-worker/` scans R2 every five minutes, streams sources to
-temporary disk, and encodes one source at a time with FFmpeg. Give it enough disk
-for a source plus its outputs. Versioned HLS outputs are immutable for one year.
-Stable master manifests and posters use `no-cache`. Segments are published before
-the poster and stable master manifest; database status updates remain in Supabase.
-`media-worker/worker.mjs` owns executable startup, configuration and real IO.
-Its import-safe `process-source.mjs` operation owns fingerprint reuse, variant
-selection, publication ordering, status and temporary-directory cleanup, with
-injected IO/encoder effects for offline tests (no FFmpeg, credentials or network).
-
-Deploy `media-worker/Dockerfile` as a separate Coolify Compose resource with no
-inbound port, using `media-worker/.env.example` for its environment. The existing
-resource is `bur1alrites-hls-worker`. For an initial local deployment, build and
-transfer the image, then select that image in the resource; switch back to the
-repository build after these changes are committed and available remotely.
+Fill in `.env.local` using [configuration and database setup](docs/configuration.md)
+before starting. The example contains shared service URLs: use only an authorized
+environment, and never put service-role or R2 secrets in `NEXT_PUBLIC_*` variables.
 
 ```bash
-npm run hls:worker:once
-HLS_SOURCE_OBJECT=hero.mov npm run hls:worker:once
-node scripts/upload-portfolio-images.mjs <directory>
+npm run dev
 ```
 
-## Migration and rollout
+Open `http://localhost:3000`; admin sign-in is at `/admin`.
+For an existing installation, confirm its migrations rather than reapplying them.
 
-```bash
-npm run storage:migrate:r2               # Paginated inventory, no writes
-npm run storage:migrate:r2 -- --copy     # Copy and read back SHA-256 verification
-npm run storage:migrate:r2 -- --verify   # Verify previously copied objects
-```
+## Architecture
 
-Migration preserves paths, content types, cache metadata, and HLS source
-fingerprints, excluding abandoned incoming uploads. It writes stable masters
-last and refuses to overwrite objects without migration ownership metadata.
-Reruns verify the existing copy, repair legacy transport-encoding metadata, and
-copy changed sources. The decoded bytes returned by HTTP fetch never inherit
-the proxy response's compression header. Each source is spooled
-to temporary disk before upload and removed afterwards.
+- `src/app/` contains the App Router UI, HTML/Three.js rendering and admin API.
+- `src/lib/` owns gallery access, media URLs, HLS and the shared preview lifecycle.
+- `supabase/migrations/` defines gallery schema, reservations and access policies.
+  Server APIs check the site-specific admin claim before service-role writes.
+- `media-worker/` processes archival masters separately from the web application.
+- `cloudflare-assets/` retains the shared delivery Worker's historical source.
+  Publishing belongs to `TheTexta/dextery-infrastructure`, not this checkout.
 
-Deploy and verify shared delivery first, including existing Elliot URLs. Pause
-uploads and the old worker for final reconciliation; verify every object before
-switching the applications to their namespaced public URLs. Start the R2 worker
-and check that migrated fingerprints reuse existing HLS output. Smoke-test
-posters, Three.js textures, HLS playback, and the editor after deployment.
-
-Retain Supabase objects and the previous site/worker deployment settings during
-cutover. For rollback, restore the prior application and worker deployments and
-public URL settings, and remove the two legacy-upload pause policies:
-
-```sql
-drop policy "Pause legacy bur1alrites browser inserts" on storage.objects;
-drop policy "Pause legacy bur1alrites browser updates" on storage.objects;
-```
-
-Do not delete source objects until the retention period is
-over. New R2 uploads must be reconciled separately before rolling back storage.
-
-## Validation
-
-The suite also discovers `media-worker/process-source.test.mjs` and deterministic
-room-session/gallery-target tests using fake browser events and layout targets.
+## Checks
 
 ```bash
 npm test
 npm run lint
-npm run build
 npm run assets:check
 ```
+
+`assets:check` compiles the retained Worker without deploying. To check and serve
+the production application locally, with configuration in place:
+
+```bash
+npm run build
+npm start
+```
+
+## Documentation
+
+- [Configuration and database setup](docs/configuration.md)
+- [Admin access and upload workflow](docs/admin-gallery.md)
+- [Playback behavior and rendering boundaries](docs/playback.md)
+- [Media worker](media-worker/README.md) and [processing operations](docs/media-processing.md)
+- [Storage, shared delivery and rollback](docs/storage.md)
+- [Retained Cloudflare Worker](cloudflare-assets/README.md) and [historical rollout evidence](cloudflare-assets/ROLLOUT.md)
