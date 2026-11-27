@@ -9,6 +9,9 @@ HLS.js previews use the lowest rendition and a short buffer, retaining a decoded
 first frame for immediate hover playback. Only the active preview uploads video
 frames to the 3D scene. Scrolling cards away releases their streams and video
 resources; HTML and mobile previews follow the same viewport loading policy.
+Desktop gallery planes render within a 20% viewport buffer on every edge so camera
+parallax does not expose missing panels; desktop video preloading also covers the
+horizontal buffer. The HTML/mobile loading policy is unchanged.
 Both rendering paths share the same playback lifecycle: failed previews are
 discarded, active previews get at most two automatic retries (after 0.5s and
 1.5s), and eight seconds without playback progress triggers a fresh stream.

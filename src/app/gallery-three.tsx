@@ -16,6 +16,7 @@ import { HERO_EYE_Y, SCREEN_Z } from "./scene-layout";
 import { VideoThumb } from "./video-thumb";
 import { useGalleryTargets } from "./gallery-target-provider";
 import { observeGalleryTargets, type GalleryTargetRegistry } from "./gallery-targets";
+import { GALLERY_PREVIEW_ROOT_MARGIN, isInGalleryRenderRange } from "./gallery-visibility";
 
 const GALLERY_HOVER_EVENT = "portfolio:gallery-hover";
 // Fixed in the room just in front of the screen's maximum displacement. Unlike a billboard tied
@@ -263,7 +264,7 @@ function GalleryVideoController({
     const stopObserving = observeGalleryTargets(
       registry,
       new Set(videos.keys()),
-      callback => new IntersectionObserver(callback, { rootMargin: "25% 0px", threshold: 0.01 }),
+      callback => new IntersectionObserver(callback, { rootMargin: GALLERY_PREVIEW_ROOT_MARGIN, threshold: 0.01 }),
       (slug, visible) => {
         if (!visible && playback.hoveredSlug === slug) {
           playback.hoveredSlug = null;
@@ -637,11 +638,7 @@ function GalleryPlane({
     const outOfReleaseRange =
       rect.bottom < -size.height * RELEASE_MARGIN ||
       rect.top > size.height * (1 + RELEASE_MARGIN);
-    const onScreen =
-      rect.bottom > 0 &&
-      rect.top < size.height &&
-      rect.right > 0 &&
-      rect.left < size.width;
+    const inRenderRange = isInGalleryRenderRange(rect, size);
 
     if (inLoadRange) loadPoster();
     else if (outOfReleaseRange && playback.hoveredSlug !== item.slug) releasePoster();
@@ -657,7 +654,7 @@ function GalleryPlane({
       labelMaterial.uniforms.uTexture.value = nextTexture;
     }
 
-    group.visible = onScreen && nextTexture !== null && labelRef.current !== null;
+    group.visible = inRenderRange && nextTexture !== null && labelRef.current !== null;
     if (!group.visible) return;
 
     const galleryDistance = Math.max(camera.position.z - GALLERY_WORLD_Z, camera.near);
